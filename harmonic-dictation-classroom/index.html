@@ -1919,18 +1919,22 @@ function studentBarHTML(){
       <span class="cb-msg cb-save ${CLASS.saveCls}" id="cbSave">${esc(CLASS.saveText)}</span>`;
     if(a&&a.id!==m.id)h+=` <button class="btn btn-sm btn-gen" onclick="openAssignment()">⚠ New dictation posted — switch to it</button>`;
     h+=`<span class="cb-sep"></span><button class="btn btn-sm btn-clr" onclick="enterPractice()">Practice instead</button>`;
+    h+=teacherLoginHTML();
     return h;
   }
   let h='<strong>Practice mode</strong>';
   if(a)h+=` · <span>Your teacher posted: <strong>${esc(a.title)}</strong></span> <button class="btn btn-sm btn-sub" onclick="openAssignment()" ${CLASS.busy?'disabled':''}>Open class dictation</button>`;
   else h+=' · no class dictation right now';
   h+=msg;
-  if(CLASS.passcodeEnabled){
-    h+=CLASS.showLogin
-      ?`<span class="cb-sep"></span><input type="password" id="cbPass" placeholder="Teacher passcode" onkeydown="if(event.key==='Enter')teacherLogin()"> <button class="btn btn-sm btn-gen" onclick="teacherLogin()">Enter</button>`
-      :`<span class="cb-sep"></span><a href="#" class="cb-link" onclick="CLASS.showLogin=true;renderClassBar();return false">Teacher login</a>`;
-  }
+  h+=teacherLoginHTML();
   return h;
+}
+/* Teacher login link / passcode box: shown in practice mode and while an assignment is open */
+function teacherLoginHTML(){
+  if(!CLASS.passcodeEnabled)return '';
+  return CLASS.showLogin
+    ?`<span class="cb-sep"></span><input type="password" id="cbPass" placeholder="Teacher passcode" onkeydown="if(event.key==='Enter')teacherLogin()"> <button class="btn btn-sm btn-gen" onclick="teacherLogin()">Enter</button>`
+    :`<span class="cb-sep"></span><a href="#" class="cb-link" onclick="CLASS.showLogin=true;renderClassBar();return false">Teacher login</a>`;
 }
 
 async function openAssignment(){
@@ -2054,7 +2058,7 @@ async function teacherLogin(){
   const pw=($('cbPass')||{}).value||'';
   try{
     const r=await srv('teacherLogin',pw);
-    if(r.ok){CLASS.sheetUrl=r.sheetUrl;await becomeTeacher(pw);return;}
+    if(r.ok){CLASS.sheetUrl=r.sheetUrl;if(CLASS.mode==='assignment')enterPractice();await becomeTeacher(pw);return;}
     CLASS.msg='Wrong passcode.';CLASS.msgCls='err';
   }catch(e){CLASS.msg='Could not check the passcode.';CLASS.msgCls='err';}
   renderClassBar();
