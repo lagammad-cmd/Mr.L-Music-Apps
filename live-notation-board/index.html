@@ -174,7 +174,7 @@ body.present main{max-width:none;padding-top:10px}
 </head>
 <body>
 <header class="top">
-  <div class="brand"><i aria-hidden="true"></i>Notation Board <span class="ver" title="Which version of the page is running">Nov 13c</span></div>
+  <div class="brand"><i aria-hidden="true"></i>Notation Board <span class="ver" title="Which version of the page is running">Nov 14</span></div>
   <div class="spacer"></div>
   <span class="chip timer hide" id="timerChip" role="timer"></span>
   <button type="button" class="chip spot hide" id="spotChip" title="Stop showing this answer to the class">Showing to class · Stop</button>
@@ -283,6 +283,7 @@ body.present main{max-width:none;padding-top:10px}
       <button type="button" class="ghost" id="btnOptions" aria-expanded="true">Options</button>
       <button type="button" class="ghost" id="btnLibrary">Library</button>
       <button type="button" class="ghost" id="btnPresent" title="Hide the controls and enlarge the board for the projector">Present</button>
+      <button type="button" class="ghost" id="btnNewQ" title="Start a new question: every student goes back to “Working” and gets a fresh board">New question</button>
       <label class="chk"><input type="checkbox" id="autoSend"> Send as I write</label>
       <button type="button" class="btn btn-go" id="btnSend">Send to class</button>
     </div>
@@ -1854,13 +1855,13 @@ const MOCK={
   whoAmI(){return{email:'',name:''};},
   needsPasscode(){return true;},
   createSession(pass){if(pass!=='demo')throw new Error('That passcode is not right.');let code='';for(let i=0;i<5;i++)code+='ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)];const key=uid();
-    store.put('k:'+code,key);store.put('b:'+code,JSON.stringify({version:0,board:'',prompt:'',flags:mockFlags({})}));store.put('r:'+code,'[]');return{code,key,url:location.href.split(/[?#]/)[0]};},
+    store.put('k:'+code,key);store.put('b:'+code,JSON.stringify({version:0,board:'',prompt:'',flags:mockFlags({}),round:0,roundTs:0}));store.put('r:'+code,'[]');return{code,key,url:location.href.split(/[?#]/)[0]};},
   key_(code,key){const real=store.get('k:'+code);if(!real)throw new Error('This board has ended. Start a new one.');if(real!==key)throw new Error('Only the teacher who started this board can do that.');},
   pushBoard(code,key,boardJson,prompt){MOCK.key_(code,key);const r=JSON.parse(store.get('b:'+code));r.version++;r.board=boardJson;r.prompt=String(prompt||'').slice(0,300);store.put('b:'+code,JSON.stringify(r));return{version:r.version};},
   pushFlags(code,key,f){MOCK.key_(code,key);const r=JSON.parse(store.get('b:'+code));r.flags=mockFlags(f);store.put('b:'+code,JSON.stringify(r));return{flags:r.flags};},
   pushSpot(code,key,boardJson,label){MOCK.key_(code,key);const ts=Date.now();store.put('p:'+code,JSON.stringify({id:ts,board:boardJson,label:String(label||'').slice(0,60)}));
     const r=JSON.parse(store.get('b:'+code));r.flags=mockFlags(r.flags);r.flags.spot=ts;store.put('b:'+code,JSON.stringify(r));return{flags:r.flags};},
-  getBoard(code,have,sid,seen){seen=seen||{};const raw=store.get('b:'+code);if(!raw)return{gone:true};const o=JSON.parse(raw),f=mockFlags(o.flags),out={version:o.version,flags:f};
+  getBoard(code,have,sid,seen){seen=seen||{};const raw=store.get('b:'+code);if(!raw)return{gone:true};const o=JSON.parse(raw),f=mockFlags(o.flags),out={version:o.version,flags:f,round:o.round||0};
     if(o.version!==have){out.board=o.board;out.prompt=o.prompt;}
     if(sid){const fb=JSON.parse(store.get('f:'+code+':'+sid)||'null');if(fb&&fb.ts>(seen.fb||0))out.fb=fb;
       if(f.spot&&f.spot!==seen.spot)out.spot=JSON.parse(store.get('p:'+code)||'null');}
@@ -1871,9 +1872,14 @@ const MOCK={
     return Object.assign(MOCK.getBoard(code,-1),{sid,name,code});},
   submitAnswer(code,sid,boardJson){const r=JSON.parse(store.get('b:'+code)||'null');if(!r)throw new Error('This board has ended.');
     if((r.flags||{}).frozen)throw new Error('Your teacher has closed answers for this task.');
-    const ts=Date.now();store.put('s:'+code+':'+sid,JSON.stringify({ts,board:boardJson}));return{ts};},
-  getAnswers(code,key,since){MOCK.key_(code,key);
-    return{students:JSON.parse(store.get('r:'+code)||'[]').map(r=>{const raw=store.get('s:'+code+':'+r.sid),o=raw?JSON.parse(raw):null;return{sid:r.sid,name:r.name,v:r.v||0,ts:o?o.ts:0,board:o&&o.ts>(since||0)?o.board:null};})};},
+    const ts=Date.now(),old=JSON.parse(store.get('s:'+code+':'+sid)||'null'),n=old&&old.ts>=(r.roundTs||0)?(old.n||1)+1:1;
+    store.put('s:'+code+':'+sid,JSON.stringify({ts,n,board:boardJson}));return{ts,n};},
+  getAnswers(code,key,since){MOCK.key_(code,key);const rec=JSON.parse(store.get('b:'+code)),r0=rec.roundTs||0;
+    return{round:rec.round||0,students:JSON.parse(store.get('r:'+code)||'[]').map(r=>{const raw=store.get('s:'+code+':'+r.sid);let o=raw?JSON.parse(raw):null;if(o&&o.ts<r0)o=null;
+      return{sid:r.sid,name:r.name,v:r.v||0,ts:o?o.ts:0,n:o?(o.n||1):0,board:o&&o.ts>(since||0)?o.board:null};})};},
+  newQuestion(code,key,boardJson,prompt){MOCK.key_(code,key);const r=JSON.parse(store.get('b:'+code)),ts=Date.now();
+    r.version++;r.board=boardJson;r.prompt=String(prompt||'').slice(0,300);r.round=(r.round||0)+1;r.roundTs=ts;r.flags=mockFlags(r.flags);r.flags.frozen=false;r.flags.spot=0;
+    store.put('b:'+code,JSON.stringify(r));return{version:r.version,round:r.round,roundTs:ts,flags:r.flags};},
   sendFeedback(code,key,sid,boardJson){MOCK.key_(code,key);const ts=Date.now();store.put('f:'+code+':'+sid,JSON.stringify({ts,board:boardJson}));return{ts};}
 };
 function api(fn,...args){
@@ -1892,7 +1898,7 @@ function api(fn,...args){
 const $=id=>document.getElementById(id);
 const A={role:null,code:'',key:'',sid:'',name:'',url:'',version:0,prompt:'',teacherBoard:'',sent:'',dirty:false,flags:{save:false,frozen:false,timerEnd:0,spot:0},
   answers:{},order:[],since:0,viewing:null,myBoard:null,sendTimer:0,pollTimer:0,saveTimer:0,compare:false,picked:[],
-  view:'mine',fb:null,fbTs:0,fbSeen:0,spot:null,spotSeen:0,heard:0};
+  view:'mine',fb:null,fbTs:0,fbSeen:0,spot:null,spotSeen:0,heard:0,round:null};
 const MAX_BOARD=95000;
 let flashTimer=0;
 function flash(text,sticky){const m=$('msg');m.textContent=text;m.style.display=text?'block':'none';clearTimeout(flashTimer);if(text&&!sticky)flashTimer=setTimeout(()=>{m.style.display='none';},6000);}
@@ -1901,7 +1907,7 @@ const clock=ts=>new Date(ts).toLocaleTimeString([], {hour:'numeric',minute:'2-di
 const ss={get:k=>{try{return sessionStorage.getItem(k);}catch(e){return null;}},put:(k,v)=>{try{sessionStorage.setItem(k,v);}catch(e){}},del:k=>{try{sessionStorage.removeItem(k);}catch(e){}}};
 
 /* ── remembering the session, so a reload does not throw anyone out ── */
-function remember(){ss.put('lnb_me',JSON.stringify({role:A.role,code:A.code,key:A.key,sid:A.sid,name:A.name,url:A.url,version:A.version,prompt:A.role==='teacher'?$('promptIn').value:A.prompt,teacherBoard:A.teacherBoard,sent:A.sent,fbSeen:A.fbSeen,heard:A.heard}));}
+function remember(){ss.put('lnb_me',JSON.stringify({role:A.role,code:A.code,key:A.key,sid:A.sid,name:A.name,url:A.url,version:A.version,prompt:A.role==='teacher'?$('promptIn').value:A.prompt,teacherBoard:A.teacherBoard,sent:A.sent,fbSeen:A.fbSeen,heard:A.heard,round:A.round}));}
 function autosave(){
   clearTimeout(A.saveTimer);
   A.saveTimer=setTimeout(()=>{if(!A.role)return;if(!A.viewing&&A.view==='mine')ss.put('lnb_board',JSON.stringify(B.board));remember();},600);
@@ -1985,6 +1991,38 @@ async function send(){
   }catch(e){$('sendStatus').textContent='Not sent';flash(e.message,true);}
   $('btnSend').disabled=false;
 }
+/* New question: send a board (blank, or what is on the board now) and put every student back to “Working”.
+   Their old answers drop off this list, their boards are replaced, answers reopen and showing-to-class stops. */
+function askNewQuestion(){
+  const body=openModal('New question');
+  const p=document.createElement('p');p.textContent='Every student goes back to “Working”, gets a fresh board, and can submit again. Their answers to the last question are cleared from your list.';body.appendChild(p);
+  const row=document.createElement('div');row.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:16px';
+  const blank=document.createElement('button');blank.type='button';blank.className='btn btn-go';blank.textContent='Start with a blank board';
+  const keep=document.createElement('button');keep.type='button';keep.className='btn';keep.textContent='Send what is on my board';
+  blank.addEventListener('click',()=>{closeModal();newQuestion(true);});keep.addEventListener('click',()=>{closeModal();newQuestion(false);});
+  row.append(blank,keep);body.appendChild(row);
+  const t=document.createElement('p');t.textContent='A blank board keeps your staff, key, meter and measures, and clears the notes, pen marks and task.';t.style.fontSize='.85rem';body.appendChild(t);
+}
+async function newQuestion(blank){
+  flushInk();if(A.viewing)backToMine();closeEditor();stopPlay();
+  if(blank){snapshot();const b=B.board;b.notes=emptyNotes();b.ink=[];b.labels=[];$('promptIn').value='';setBoard(b,true);}
+  const json=JSON.stringify(B.board);
+  if(json.length>MAX_BOARD){flash('This board is too large to send. Clear some of the pen marks and try again.',true);return;}
+  $('btnNewQ').disabled=true;$('sendStatus').textContent='Sending…';
+  try{
+    const r=await api('newQuestion',A.code,A.key,json,$('promptIn').value);
+    A.round=r.round;A.since=r.roundTs;A.version=r.version;A.sent=json;A.flags=r.flags;
+    A.order.forEach(sid=>{const a=A.answers[sid];Object.assign(a,{board:null,ts:0,count:0,issues:null,match:null,heard:0,stale:false,marks:{ink:[],labels:[]}});});
+    A.picked=[];if(A.compare)setCompare(false);
+    syncFlags();drawAnswers();remember();
+    $('sendStatus').textContent='New question sent at '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit',second:'2-digit'});
+    flash(blank?'New question started. Everyone has a blank board. Write the question and press Send to class.':'New question sent. Everyone is back to “Working”.');
+  }catch(e){
+    $('sendStatus').textContent='Not sent';
+    flash(/not found/i.test(e.message)?'The server needs the new Code.gs before New question works. Update it in Apps Script and deploy a new version.':e.message,true);
+  }
+  $('btnNewQ').disabled=false;
+}
 /* what the answer card reports: the voice-leading flags, and for dictation how much matches */
 function grade(a){
   if(!a.board)return;
@@ -1993,12 +2031,13 @@ function grade(a){
 }
 async function pollAnswers(){
   try{
-    const r=await api('getAnswers',A.code,A.key,A.since);
+    const rd=A.round,r=await api('getAnswers',A.code,A.key,A.since);
+    if(A.round!==rd)throw new Error('a new question started while this was on its way');
     let fresh=false;
     r.students.forEach(s=>{
       let a=A.answers[s.sid];
       if(!a){a=A.answers[s.sid]={sid:s.sid,name:s.name,v:s.v,ts:0,board:null,marks:{ink:[],labels:[]}};a.n=A.order.push(s.sid);fresh=true;}
-      if(s.board!=null&&s.ts>a.ts){a.board=s.board;a.ts=s.ts;a.stale=true;if(A.viewing===a)a.reload=true;grade(a);fresh=true;A.since=Math.max(A.since,s.ts);}
+      if(s.board!=null&&s.ts>a.ts){a.board=s.board;a.ts=s.ts;a.count=s.n||1;a.stale=true;if(A.viewing===a)a.reload=true;grade(a);fresh=true;A.since=Math.max(A.since,s.ts);}
     });
     if(fresh)drawAnswers();
   }catch(e){/* try again on the next round */}
@@ -2021,7 +2060,7 @@ function drawAnswers(){
     a.card.classList.toggle('picked',A.picked.includes(a));
     if(a.board){
       done++;a.card.classList.remove('waiting');a.card.classList.add('in');
-      const n=a.issues?a.issues.length:0,bits=['Submitted '+clock(a.ts)];
+      const n=a.issues?a.issues.length:0,bits=[(a.count>1?`Submitted ${a.count}× · last `:'Submitted ')+clock(a.ts)];
       if(a.match)bits.push(`${a.match.right} of ${a.match.total} right`+(a.match.extra?`, ${a.match.extra} extra`:'')+(a.heard?` · heard ${a.heard}×`:''));
       if(a.issues)bits.push(n?`${n} flag${n>1?'s':''}`:'no flags');
       a.st.textContent=bits.join(' · ');
@@ -2029,7 +2068,8 @@ function drawAnswers(){
       if(a.issues)[...new Set(a.issues.map(i=>i.kind))].forEach(k=>tally[k]=(tally[k]||0)+1);
       if(a.stale){a.stale=false;try{drawStatic(a.th,withMarks(a));}catch(e){a.th.textContent='Could not draw this answer.';}
         if(A.viewing===a&&a.reload){a.reload=false;loadAnswer(a);}}
-    }else a.st.textContent='Working…';
+    }else{a.st.textContent='Working…';a.st.classList.remove('flagged');
+      if(a.card.classList.contains('in')){a.card.classList.remove('in');a.card.classList.add('waiting');a.th.innerHTML='';}}
   });
   $('answersTitle').textContent=A.order.length?`Answers: ${done} of ${A.order.length} in`:'Answers';
   const kinds=Object.keys(tally);
@@ -2196,13 +2236,17 @@ async function join(code,name){
 }
 function studentChanged(){if(A.view!=='mine')return;A.dirty=true;autosave();}
 function takeBoard(r,force){
+  const fresh=r.round!=null&&A.round!=null&&r.round>A.round&&r.board!=null;     // the teacher started a new question
+  if(r.round!=null&&(r.board!=null||A.round==null))A.round=r.round;
   if(r.flags){A.flags=r.flags;syncFlags();tickTimer();}
+  if(fresh){A.fb=null;$('fbNote').style.display='none';}
   if(r.fb&&r.fb.ts>A.fbTs){A.fb=r.fb.board;A.fbTs=r.fb.ts;if(A.fbTs>A.fbSeen&&A.view!=='fb')$('fbNote').style.display='flex';}
   if(r.spot&&r.spot.id&&r.spot.id!==A.spotSeen){A.spot=r.spot;A.spotSeen=r.spot.id;showSpot();}
   if(r.version==null||r.board==null)return;
   A.version=r.version;A.teacherBoard=r.board;A.prompt=r.prompt||'';
-  if(force||(!A.dirty&&A.view==='mine'))loadTeacherBoard();
+  if(force||fresh||(!A.dirty&&A.view==='mine'))loadTeacherBoard();
   else $('newBoardNote').style.display='flex';
+  if(fresh){$('submitStatus').textContent='New question. Not submitted yet';flash('Your teacher started a new question.');}
   remember();
 }
 function showPrompt(){
@@ -2249,7 +2293,7 @@ async function submit(){
   const json=JSON.stringify(B.board);
   if(json.length>MAX_BOARD){flash('This answer is too large to send. Clear some of the pen marks and try again.',true);return;}
   $('btnSubmit').disabled=true;$('submitStatus').textContent='Sending…';
-  try{const r=await api('submitAnswer',A.code,A.sid,json);$('submitStatus').textContent='Submitted at '+clock(r.ts)+'. You can keep working and submit again.';}
+  try{const r=await api('submitAnswer',A.code,A.sid,json);$('submitStatus').textContent=(r.n>1?`Submitted again (${r.n}×) at `:'Submitted at ')+clock(r.ts)+'. You can keep working and submit again.';}
   catch(e){$('submitStatus').textContent='Not submitted';flash(e.message,true);}
   $('btnSubmit').disabled=!!A.flags.frozen;
 }
@@ -2263,13 +2307,13 @@ async function resume(){
     if(me.role==='teacher'){
       await api('getAnswers',me.code,me.key,0);                // fails if the session has ended
       Object.assign(A,{role:'teacher',code:me.code,key:me.key,url:me.url||'',version:me.version||0,sent:me.sent||''});
-      const r=await api('getBoard',me.code,-1);if(r.flags)A.flags=r.flags;
+      const r=await api('getBoard',me.code,-1);if(r.flags)A.flags=r.flags;A.round=r.round==null?null:r.round;
       openBoard();if(saved)setBoard(parseBoard(saved));$('promptIn').value=me.prompt||'';
       $('sendStatus').textContent=A.version?'Welcome back. Your board was kept.':'Not sent yet';
       B.onChange=teacherChanged;pollAnswers();
     }else{
       const r=await api('getBoard',me.code,-1,me.sid,{fb:0,spot:0});if(r.gone)throw new Error('gone');
-      Object.assign(A,{role:'student',code:me.code,sid:me.sid,name:me.name,version:me.version||0,prompt:me.prompt||'',teacherBoard:me.teacherBoard||'',fbSeen:me.fbSeen||0,heard:me.heard||0});
+      Object.assign(A,{role:'student',code:me.code,sid:me.sid,name:me.name,version:me.version||0,prompt:me.prompt||'',teacherBoard:me.teacherBoard||'',fbSeen:me.fbSeen||0,heard:me.heard||0,round:me.round==null?null:me.round});
       openBoard();B.onChange=studentChanged;
       if(saved){setBoard(parseBoard(saved));A.dirty=true;showPrompt();takeBoard({flags:r.flags,fb:r.fb,spot:r.spot},false);
         if(r.version!==A.version)takeBoard(r,false);}
@@ -2352,6 +2396,7 @@ $('btnMidi').addEventListener('click',toggleMidi);
 $('btnPresent').addEventListener('click',()=>present(true));
 $('btnExitPresent').addEventListener('click',()=>present(false));
 $('btnSend').addEventListener('click',send);
+$('btnNewQ').addEventListener('click',askNewQuestion);
 $('promptIn').addEventListener('input',()=>{$('sendStatus').textContent='Changes not sent';autosave();});
 $('btnOptions').addEventListener('click',()=>{const open=$('optRows').classList.toggle('shut');$('btnOptions').setAttribute('aria-expanded',!open);});
 $('btnLibrary').addEventListener('click',openLibrary);
