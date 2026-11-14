@@ -405,7 +405,7 @@ td.issues { color:var(--ink2); max-width:280px; }
 
 <header>
   <div>
-    <div class="h-title">Chorale Writer <span class="h-badge">Classroom</span></div>
+    <div class="h-title">Chorale Writer <span class="h-badge">Practice</span></div>
     <div class="h-sub">AP Music Theory · SATB Realization</div>
   </div>
   <div id="keyBadge">—</div>
@@ -2095,16 +2095,22 @@ function clearAll(){closeRnPicker();
    teacher sees live grades. Needs the Apps Script backend
    (google.script.run); without it the app is plain practice mode.
 ═══════════════════════════════════════════════════════ */
-const HAS_SERVER=typeof google!=='undefined'&&google.script&&google.script.run;
+/* The page is hosted on GitHub; this is the address of the Apps Script backend that stores class data.
+   Paste your web app URL (it ends in /exec) between the quotes. */
+const API_URL='PASTE_YOUR_WEB_APP_URL_HERE';
+const HAS_SERVER=/^https:\/\/script\.google\.com\//.test(API_URL);
 const CLASS={role:'student',passcode:'',email:'',active:null,mode:'practice',assignmentId:null,assignmentMeta:null,
   name:'',submitted:null,sheetUrl:'',passcodeEnabled:false,busy:false,draftOK:false,saveText:'',saveCls:'',savedSig:'',msg:'',msgCls:'',showLogin:false,poll:null,sig:''};
 const TP={open:false,list:[],assignmentId:null,data:null,rows:[],sort:'name',title:'',showScore:true,gradesUrl:'',msg:'',sig:''};
 const VIEW={stash:null,loading:false};
 
-function srv(fn,...args){
-  return new Promise((resolve,reject)=>{
-    google.script.run.withSuccessHandler(resolve).withFailureHandler(e=>reject(e))[fn](...args);
-  });
+async function srv(fn,...args){
+  // text/plain keeps the browser from sending a pre-flight request, which Apps Script cannot answer
+  const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn:fn,args:args})});
+  if(!r.ok)throw new Error('Server error '+r.status);
+  const j=await r.json();
+  if(!j.ok)throw new Error(j.error||'Server error');
+  return j.result;
 }
 function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
