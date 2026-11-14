@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rhythm Reader</title>
+<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: same shell as the other theory apps (colored header, toolbar, white score card), with one big tap pad under the rhythm. */
+:root{
+  color-scheme:light;
+  --bg:#f3f5f9;--surf:#ffffff;--border:#cfd6e2;--border2:#8793ab;
+  --text:#18202e;--text2:#465166;--text3:#6c778c;
+  --accent:#2a4a7f;--accent-dk:#1d3660;--accent-lt:#e9effa;
+  --good:#276749;--ok:#b7791f;--bad:#c53030;
+  --shadow:0 1px 4px rgba(0,0,0,.09),0 2px 12px rgba(0,0,0,.05);--r:6px;
+  --display:'Merriweather',Georgia,serif;--body:'Source Sans 3',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:15px}
+body{font-family:var(--body);background:var(--bg);color:var(--text);min-height:100%}
+header{background:var(--accent);color:#fff;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.h-left{padding:11px 0}
+.h-title{font-family:var(--display);font-size:1.3rem;font-style:italic}
+.h-sub{font-family:var(--mono);font-size:.6rem;opacity:.75;letter-spacing:.06em;margin-top:3px}
+.h-badge{display:flex;gap:8px;padding:11px 0;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:.72rem;font-weight:500;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);padding:4px 14px;border-radius:20px;letter-spacing:.05em;white-space:nowrap;font-variant-numeric:tabular-nums}
+.toolbar{background:var(--surf);border-bottom:1px solid var(--border);padding:8px 24px;display:flex;flex-direction:column;gap:7px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.toolbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.toolbar-row+.toolbar-row{padding-top:7px;border-top:1px solid var(--border)}
+.lbl{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text3)}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:.87rem;color:var(--text2);cursor:pointer}
+.chk input{accent-color:var(--accent);width:16px;height:16px}
+.btn{font-family:var(--body);font-size:.87rem;font-weight:600;padding:6px 18px;border-radius:var(--r);border:1.5px solid var(--border2);background:var(--surf);color:var(--text);cursor:pointer;transition:background .13s}
+.btn:hover{background:var(--bg)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-go{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-go:hover{background:var(--accent-dk)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2.5px solid #dd6b20;outline-offset:2px}
+select{font-family:var(--body);font-size:.87rem;padding:5px 8px;border:1.5px solid var(--border2);border-radius:var(--r);background:var(--surf);color:var(--text);max-width:100%}
+input[type=range]{accent-color:var(--accent);width:110px}
+.mono{font-family:var(--mono);font-size:.75rem;color:var(--text2);font-variant-numeric:tabular-nums}
+main{max-width:1080px;margin:0 auto;padding:18px 16px 40px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px}
+.card h2{font-family:var(--display);font-size:1.02rem;text-wrap:balance}
+.card p{color:var(--text2);margin-top:4px;max-width:65ch}
+.score-wrap{overflow-x:auto}
+.score{min-width:600px}
+.score svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--text2);margin-top:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+#pad{width:100%;min-height:120px;border-radius:10px;border:2px solid var(--accent);background:var(--accent-lt);color:var(--accent-dk);font-family:var(--display);font-size:1.5rem;font-weight:700;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transition:background .08s}
+#pad small{font-family:var(--mono);font-size:.68rem;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+#pad.hit{background:#cfdcf3}
+#pad.g-perfect{background:#d5eedd}#pad.g-good{background:#f6ecc9}#pad.g-close{background:#fbe3cf}#pad.g-stray{background:#f9d6d6}
+#results{display:none;border-left:5px solid var(--accent)}
+.stars{font-size:1.5rem;letter-spacing:.1em;color:var(--ok)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:12px 0}
+.stat{border:1px solid var(--border);border-radius:var(--r);padding:8px 10px}
+.stat b{display:block;font-family:var(--mono);font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.78rem;color:var(--text2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+@media (max-width:520px){header,.toolbar{padding-left:16px;padding-right:16px}}
+@media (prefers-reduced-motion:reduce){#pad{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="h-left">
+    <div class="h-title">Rhythm Reader</div>
+    <div class="h-sub">READ IT · TAP IT · SEE HOW CLOSE YOU WERE</div>
+  </div>
+  <div class="h-badge">
+    <span class="pill" id="bestPill">Best —</span>
+    <span class="pill" id="unlockPill">Level 1 of 7</span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="toolbar-row">
+    <label class="lbl" for="levelSel">Level</label>
+    <select id="levelSel"></select>
+    <label class="lbl" for="tempo">Tempo</label>
+    <input type="range" id="tempo" min="44" max="132" step="4" value="80">
+    <span class="mono" id="tempoVal"></span>
+    <label class="chk"><input type="checkbox" id="metro" checked> Metronome</label>
+    <label class="chk"><input type="checkbox" id="tapSnd" checked> Tap sound</label>
+  </div>
+  <div class="toolbar-row">
+    <button type="button" class="btn" id="btnNew">New rhythm</button>
+    <button type="button" class="btn" id="btnListen">Listen first</button>
+    <button type="button" class="btn btn-go" id="btnStart">▶ Start</button>
+    <button type="button" class="btn" id="btnStop" disabled>■ Stop</button>
+    <label class="lbl" for="offset">Timing offset</label>
+    <input type="range" id="offset" min="-100" max="250" step="10" value="0">
+    <span class="mono" id="offsetVal">0 ms</span>
+  </div>
+</div>
+
+<main>
+  <section class="card">
+    <h2 id="taskTitle"></h2>
+    <p>Press Start, listen to one measure of clicks, then tap each note as the line reaches it. Use the Space bar or the tap pad. Rests are silent: leave them alone.</p>
+  </section>
+
+  <section class="card">
+    <div class="score-wrap"><div class="score" id="score"></div></div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--good)"></span>On the beat</span>
+      <span><span class="dot" style="background:var(--ok)"></span>Close (dot sits left if early, right if late)</span>
+      <span><span class="dot" style="background:var(--bad)"></span>Missed</span>
+    </div>
+  </section>
+
+  <button type="button" id="pad"><span id="padText">Tap here</span><small>or press the space bar</small></button>
+
+  <section class="card" id="results">
+    <h2 id="resTitle"></h2>
+    <div class="stars" id="resStars" aria-hidden="true"></div>
+    <div class="stats" id="resStats"></div>
+    <p id="resTip"></p>
+    <div class="actions">
+      <button type="button" class="btn" id="btnRetry">Try this rhythm again</button>
+      <button type="button" class="btn" id="btnAnother">New rhythm, same level</button>
+      <button type="button" class="btn btn-go" id="btnNextLevel">Next level →</button>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   LEVELS — rhythms are built from one-beat (or two-beat) cells.
+   All lengths are in sixteenth notes; a negative number is a rest.
+═══════════════════════════════════════════════════ */
+const LEVELS=[
+  {name:'Quarters and halves',      meter:'4/4',bpm:80,cells:[[4],[4],[8]]},
+  {name:'Eighth-note pairs',        meter:'4/4',bpm:80,cells:[[4],[2,2],[2,2],[8]]},
+  {name:'Quarter rests',            meter:'4/4',bpm:80,cells:[[4],[2,2],[-4],[-4],[8]]},
+  {name:'Dotted quarter and eighth',meter:'4/4',bpm:76,cells:[[4],[2,2],[6,2],[6,2],[-4],[8]]},
+  {name:'Sixteenth notes',          meter:'4/4',bpm:64,cells:[[4],[2,2],[1,1,1,1],[2,1,1],[1,1,2],[-4],[6,2]]},
+  {name:'Syncopation',              meter:'4/4',bpm:72,cells:[[4],[2,2],[2,4,2],[2,4,2],[-2,2],[-2,2],[6,2],[1,1,1,1]]},
+  {name:'Compound meter (6/8)',     meter:'6/8',bpm:56,cells:[[6],[2,2,2],[2,2,2],[4,2],[2,4],[-6],[12],[2,1,1,2]]}
+];
+const N_MEASURES=4;
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const sum=c=>c.reduce((t,x)=>t+Math.abs(x),0);
+function meterInfo(L){return L.meter==='6/8'?{beat:6,beats:2,bar:12}:{beat:4,beats:4,bar:16};}
+
+/* Returns a list of events: {pos, dur, rest, m} with pos and dur in sixteenths. */
+function genRhythm(L){
+  const M=meterInfo(L),ev=[];let lastRest=false;
+  for(let m=0;m<N_MEASURES;m++){
+    let p=0;const final=m===N_MEASURES-1,stopAt=final?M.bar-(M.beats===4?8:6):M.bar;
+    while(p<M.bar){
+      let cell;
+      if(p>=stopAt)cell=[M.bar-p];                                   // end the last measure on a long note
+      else{
+        for(let tries=0;tries<80;tries++){
+          const c=pick(L.cells),len=sum(c);
+          if(p+len>stopAt)continue;
+          if(len>M.beat&&p%len!==0)continue;                         // two-beat cells start on beats 1 or 3
+          if(c[0]<0&&(lastRest||(m===0&&p===0)))continue;            // never open with a rest or stack two rests
+          cell=c;break;
+        }
+        if(!cell)cell=[M.beat];
+      }
+      cell.forEach(d=>{ev.push({pos:m*M.bar+p,dur:Math.abs(d),rest:d<0,m});p+=Math.abs(d);});
+      lastRest=cell[cell.length-1]<0;
+    }
+  }
+  return ev;
+}
+
+/* ═══════════════════════════════════════════════════
+   NOTATION (VexFlow 4) — one-line rhythm staff. Records each event's x position
+   so the playhead and the feedback dots can be placed on it.
+═══════════════════════════════════════════════════ */
+const DUR={1:'16',2:'8',4:'q',6:'qd',8:'h',12:'hd',16:'w'};
+const SVGNS='http://www.w3.org/2000/svg';
+function svgEl(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+/* Notes are spaced in proportion to time (a half note takes twice the room of a quarter),
+   two measures per line, so the playhead can move at one steady speed. */
+const VIEW={W:1000,H:280,top:20,rowH:125,extra:92,gap:14,perRow:2,lineY:[],dotY:[]};
+function geom(){const M=meterInfo(LEVELS[S.level]),mw=(VIEW.W-24-VIEW.extra)/VIEW.perRow;return{bar:M.bar,k:mw/M.bar,mw,A:12+VIEW.extra+VIEW.gap,rows:N_MEASURES/VIEW.perRow};}
+function place(pos){                                     // where a time (in sixteenths) sits on the page
+  const g=geom(),p=Math.max(0,Math.min(pos,N_MEASURES*g.bar)),row=Math.min(g.rows-1,Math.floor(p/(VIEW.perRow*g.bar)));
+  return{row,x:g.A+g.k*(p-row*VIEW.perRow*g.bar)};
+}
+function renderScore(){
+  const el=$('score');el.innerHTML='';
+  if(!window.Vex){el.textContent='The notation library did not load. Check the connection and reload the page.';return;}
+  const VF=Vex.Flow,L=LEVELS[S.level],M=meterInfo(L),g=geom();
+  const r=new VF.Renderer(el,VF.Renderer.Backends.SVG);r.resize(VIEW.W,VIEW.H);
+  const ctx=r.getContext();
+  for(let m=0;m<N_MEASURES;m++){
+    const row=Math.floor(m/VIEW.perRow),col=m%VIEW.perRow;
+    const st=new VF.Stave(12+(col?VIEW.extra+col*g.mw:0),VIEW.top+row*VIEW.rowH,g.mw+(col?0:VIEW.extra));
+    st.setConfigForLines([{visible:false},{visible:false},{visible:true},{visible:false},{visible:false}]);
+    if(col===0){st.addClef('percussion');if(row===0)st.addTimeSignature(L.meter);}
+    if(m===N_MEASURES-1)st.setEndBarType(VF.Barline.type.END);
+    st.setMeasure(m+1).setContext(ctx).draw();
+    const evs=S.events.filter(e=>e.m===m),sns=evs.map(e=>{
+      const sn=new VF.StaveNote({keys:['b/4'],duration:DUR[e.dur]+(e.rest?'r':''),stem_direction:1});
+      if(e.dur===6||e.dur===12){if(VF.Dot&&VF.Dot.buildAndAttach)VF.Dot.buildAndAttach([sn],{all:true});else if(sn.addDotToAll)sn.addDotToAll();}
+      sn.setStave(st);return sn;
+    });
+    const v=new VF.Voice({num_beats:M.beats,beat_value:M.beat===6?8:4}).setMode(VF.Voice.Mode.SOFT);v.addTickables(sns);
+    const beams=VF.Beam.generateBeams(sns,{groups:[M.beat===6?new VF.Fraction(3,8):new VF.Fraction(1,4)],stem_direction:1});
+    new VF.Formatter().joinVoices([v]).formatToStave([v],st);
+    evs.forEach((e,i)=>{                                 // move each note to its time-proportional spot
+      const want=place(e.pos).x-6,tc=sns[i].getTickContext();
+      tc.setX(tc.getX()+(want-sns[i].getAbsoluteX()));
+      e.x=want+6;e.row=row;
+    });
+    v.draw(ctx,st);beams.forEach(b=>b.setContext(ctx).draw());
+    VIEW.lineY[row]=st.getYForLine(2);VIEW.dotY[row]=st.getYForLine(2)+42;
+  }
+  const svg=el.querySelector('svg');
+  svg.setAttribute('viewBox',`0 0 ${VIEW.W} ${VIEW.H}`);svg.removeAttribute('width');svg.removeAttribute('height');svg.style.width='100%';svg.style.height='auto';
+  svg.setAttribute('role','img');svg.setAttribute('aria-label','Rhythm to tap, four measures of '+L.meter);
+  S.events.forEach(e=>{if(!e.rest)svg.appendChild(svgEl('line',{x1:e.x,x2:e.x,y1:VIEW.dotY[e.row]-6,y2:VIEW.dotY[e.row]+6,stroke:'#b8c1d1','stroke-width':1.5}));});
+  S.head=svgEl('line',{stroke:'#dd6b20','stroke-width':3,'stroke-linecap':'round',opacity:0});
+  svg.appendChild(S.head);S.svg=svg;moveHead(0);
+}
+function moveHead(pos){
+  const p=place(pos);
+  S.head.setAttribute('x1',p.x);S.head.setAttribute('x2',p.x);
+  S.head.setAttribute('y1',VIEW.lineY[p.row]-48);S.head.setAttribute('y2',VIEW.dotY[p.row]+10);
+}
+const GRADE_COLOR={perfect:'#276749',good:'#b7791f',close:'#b7791f',miss:'#c53030'};
+function drawDot(e){
+  const dx=e.grade==='miss'?0:Math.max(-9,Math.min(9,e.err/S.run.win*9));
+  const c=svgEl('circle',{cx:e.x+dx,cy:VIEW.dotY[e.row],r:e.grade==='perfect'?5.5:4.5,fill:GRADE_COLOR[e.grade]});
+  const t=svgEl('title',{});t.textContent=e.grade==='miss'?'Missed':`${Math.abs(Math.round(e.err*1000))} ms ${e.err<0?'early':'late'}`;c.appendChild(t);
+  S.svg.appendChild(c);
+}
+
+/* ═══════════════════════════════════════════════════
+   AUDIO — metronome clicks, a woodblock for "Listen first", and a soft tap sound.
+   Everything is scheduled on the Web Audio clock, and taps are timed on the same clock.
+═══════════════════════════════════════════════════ */
+let audioCtx=null,runBus=null;
+function getCtx(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;audioCtx=new AC({latencyHint:'interactive'});}return audioCtx;}
+function blip(t,freq,dur,gain,type,dest){
+  const ctx=getCtx(),o=ctx.createOscillator(),g=ctx.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,t);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+0.003);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(dest||ctx.destination);o.start(t);o.stop(t+dur+0.02);
+}
+const click=(t,accent)=>blip(t,accent?1760:1175,0.045,accent?0.5:0.3,'sine',runBus);
+const wood=t=>{blip(t,740,0.09,0.55,'triangle',runBus);blip(t,1480,0.05,0.2,'sine',runBus);};
+const tapSound=()=>{const c=getCtx();blip(c.currentTime,330,0.05,0.25,'triangle');};
+/* The audio clock only advances in small jumps, which made the playhead stutter.
+   audioNow() reads the smooth system clock and keeps it lined up with the audio clock. */
+let clockOff=-1e9;
+function audioNow(){
+  const p=performance.now()/1000,d=getCtx().currentTime-p;
+  if(d>clockOff||clockOff-d>0.05)clockOff=d;
+  return p+clockOff;
+}
+function latency(){const c=getCtx();return(c.outputLatency||c.baseLatency||0)+(+$('offset').value)/1000;}
+
+/* ═══════════════════════════════════════════════════
+   GAME
+═══════════════════════════════════════════════════ */
+const S={level:0,events:[],run:null,best:{},head:null,svg:null,unlocked:0};
+const $=id=>document.getElementById(id);
+function sixDur(){const L=LEVELS[S.level],bpm=+$('tempo').value;return 60/bpm/meterInfo(L).beat;}
+function newRhythm(){stop();S.events=genRhythm(LEVELS[S.level]);$('results').style.display='none';renderScore();updateText();}
+function updateText(){
+  const L=LEVELS[S.level];
+  $('taskTitle').textContent=`Level ${S.level+1}: ${L.name}`;
+  $('tempoVal').textContent=(L.meter==='6/8'?'♩. = ':'♩ = ')+$('tempo').value;
+  $('offsetVal').textContent=$('offset').value+' ms';
+  $('bestPill').textContent=S.best[S.level]!=null?`Best ${S.best[S.level]}%`:'Best —';
+  $('unlockPill').textContent=`Level ${S.level+1} of ${LEVELS.length}`;
+}
+function setPad(text,cls){$('padText').textContent=text;$('pad').className=cls||'';}
+function start(mode){
+  stop();
+  const ctx=getCtx();try{if(ctx.state==='suspended')ctx.resume();}catch(e){}
+  if(mode==='play'){renderScore();$('results').style.display='none';}
+  const L=LEVELS[S.level],M=meterInfo(L),six=sixDur(),beat=six*M.beat,total=N_MEASURES*M.bar;
+  runBus=ctx.createGain();runBus.connect(ctx.destination);
+  const t0=ctx.currentTime+0.25+M.beats*beat;                       // one measure of count-in
+  for(let b=-M.beats;b<N_MEASURES*M.beats;b++){
+    if(b<0||$('metro').checked)click(t0+b*beat,mod(b,M.beats)===0);
+  }
+  const onsets=S.events.filter(e=>!e.rest);
+  onsets.forEach(e=>{e.grade=null;e.err=0;});
+  if(mode==='listen')onsets.forEach(e=>wood(t0+e.pos*six));
+  let minGap=1e9;onsets.forEach((e,i)=>{if(i)minGap=Math.min(minGap,(e.pos-onsets[i-1].pos)*six);});
+  const win=Math.min(0.18,0.45*minGap);
+  S.run={mode,t0,six,beat,total,win,onsets,stray:0,M,raf:0};
+  S.head.setAttribute('opacity',1);
+  $('btnStop').disabled=false;$('btnStart').disabled=true;$('btnListen').disabled=true;
+  tick();
+}
+const mod=(a,b)=>((a%b)+b)%b;
+function tick(){
+  const R=S.run;if(!R)return;
+  const now=audioNow()-latency(),pos=(now-R.t0)/R.six;
+  moveHead(pos);
+  if(pos<0){
+    const beatsLeft=Math.ceil(-pos/R.M.beat),n=R.M.beats-beatsLeft+1;
+    if(n>=1&&$('padText').textContent!==String(n))setPad(String(n),'');
+  }else if(R.mode==='listen'){if($('padText').textContent!=='Listen…')setPad('Listen…','');}
+  else if(/^\d$/.test($('padText').textContent))setPad('Go','');
+  if(R.mode==='play')R.onsets.forEach(e=>{if(!e.grade&&now>R.t0+e.pos*R.six+R.win){e.grade='miss';drawDot(e);}});
+  if(pos>=R.total+2){finish();return;}
+  R.raf=requestAnimationFrame(tick);
+}
+function tap(){
+  const R=S.run;
+  if($('tapSnd').checked&&audioCtx)tapSound();
+  if(!R||R.mode!=='play')return;
+  const now=audioNow()-latency();
+  if(now<R.t0-R.win)return;                                          // taps during the count-in do not count
+  let best=null,bd=1e9;
+  R.onsets.forEach(e=>{if(e.grade)return;const d=now-(R.t0+e.pos*R.six);if(Math.abs(d)<Math.abs(bd)){bd=d;best=e;}});
+  if(best&&Math.abs(bd)<=R.win){
+    best.err=bd;best.grade=Math.abs(bd)<=R.win*0.34?'perfect':Math.abs(bd)<=R.win*0.67?'good':'close';
+    drawDot(best);
+    setPad(best.grade==='perfect'?'On it':bd<0?'Early':'Late','g-'+best.grade);
+  }else{R.stray++;setPad('Extra tap','g-stray');}
+}
+function stop(){
+  const R=S.run;if(!R)return;
+  cancelAnimationFrame(R.raf);S.run=null;
+  if(runBus){try{runBus.gain.setValueAtTime(0,getCtx().currentTime);runBus.disconnect();}catch(e){}runBus=null;}
+  if(S.head)S.head.setAttribute('opacity',0);
+  $('btnStop').disabled=true;$('btnStart').disabled=false;$('btnListen').disabled=false;
+  setPad('Tap here','');
+}
+function finish(){
+  const R=S.run;if(!R)return;
+  const mode=R.mode,on=R.onsets,stray=R.stray;stop();
+  if(mode!=='play')return;
+  const n=g=>on.filter(e=>e.grade===g).length,hit=on.filter(e=>e.grade&&e.grade!=='miss');
+  const pts=n('perfect')*100+n('good')*75+n('close')*45;
+  const score=Math.max(0,Math.round(pts/on.length-stray*6));
+  const stars=score>=90?3:score>=75?2:score>=55?1:0;
+  if(S.best[S.level]==null||score>S.best[S.level])S.best[S.level]=score;
+  $('resTitle').textContent=`${score}% at ${$('tempo').value} beats per minute`;
+  $('resStars').textContent='★'.repeat(stars)+'☆'.repeat(3-stars);
+  $('resStats').innerHTML='';
+  [['On the beat',n('perfect')],['Nearly',n('good')],['Close',n('close')],['Missed',n('miss')],['Extra taps',stray]].forEach(([k,v])=>{
+    const d=document.createElement('div');d.className='stat';const b=document.createElement('b');b.textContent=v;const s=document.createElement('span');s.textContent=k;d.append(b,s);$('resStats').appendChild(d);
+  });
+  let tip='';
+  if(hit.length>=3){
+    const avg=hit.reduce((t,e)=>t+e.err,0)/hit.length*1000;
+    tip=Math.abs(avg)<15?'Your taps were centered on the beat.':`On average you tapped ${Math.round(Math.abs(avg))} ms ${avg<0?'early':'late'}. ${avg<0?'Let the click lead you.':'Aim a hair sooner, or raise the timing offset if every tap reads late.'}`;
+  }else tip='Most notes were missed. Try “Listen first”, or slow the tempo down.';
+  if(stars>=2&&S.level<LEVELS.length-1)tip+=' That is enough to move up a level.';
+  $('resTip').textContent=tip;
+  $('btnNextLevel').style.display=stars>=2&&S.level<LEVELS.length-1?'':'none';
+  $('results').style.display='block';updateText();
+}
+function setLevel(i){S.level=i;$('levelSel').value=i;$('tempo').value=LEVELS[i].bpm;newRhythm();}
+
+LEVELS.forEach((L,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${i+1}. ${L.name}`;$('levelSel').appendChild(o);});
+$('levelSel').addEventListener('change',e=>setLevel(+e.target.value));
+$('tempo').addEventListener('input',()=>{if(S.run)stop();updateText();});
+$('offset').addEventListener('input',updateText);
+$('btnNew').addEventListener('click',newRhythm);
+$('btnAnother').addEventListener('click',()=>{newRhythm();window.scrollTo({top:0,behavior:'smooth'});});
+$('btnListen').addEventListener('click',()=>start('listen'));
+$('btnStart').addEventListener('click',()=>start('play'));
+$('btnRetry').addEventListener('click',()=>start('play'));
+$('btnStop').addEventListener('click',stop);
+$('btnNextLevel').addEventListener('click',()=>{setLevel(S.level+1);window.scrollTo({top:0,behavior:'smooth'});});
+$('pad').addEventListener('pointerdown',e=>{e.preventDefault();tap();});
+$('pad').addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault();});
+document.addEventListener('keydown',e=>{
+  if(e.code!=='Space')return;
+  if(S.run||e.target===document.body||e.target===$('pad')){e.preventDefault();if(!e.repeat)tap();}
+});
+
+setLevel(0);
+</script>
+</body>
+</html>
