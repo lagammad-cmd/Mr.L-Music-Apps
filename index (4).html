@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music Apps</title>
+<style>
+  :root {
+    --bg: #0b0c10;
+    --glow: rgba(124, 108, 255, .16);
+    --card: rgba(255, 255, 255, .035);
+    --card-hover: rgba(255, 255, 255, .07);
+    --line: rgba(255, 255, 255, .09);
+    --line-hover: rgba(255, 255, 255, .28);
+    --ink: #f4f5f7;
+    --muted: #8b90a0;
+    --accent: #a59bff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fafafb;
+      --glow: rgba(110, 92, 255, .10);
+      --card: #ffffff;
+      --card-hover: #ffffff;
+      --line: rgba(15, 18, 30, .09);
+      --line-hover: rgba(15, 18, 30, .35);
+      --ink: #0f121e;
+      --muted: #666c7c;
+      --accent: #5b4be0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 480px at 50% -160px, var(--glow), transparent 70%),
+      var(--bg);
+    background-repeat: no-repeat;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px 64px; }
+
+  header { padding: 76px 0 28px; text-align: center; }
+  h1 {
+    margin: 0;
+    font-size: clamp(2.4rem, 8vw, 4rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+  }
+  header p {
+    margin: 14px auto 0;
+    max-width: 30em;
+    color: var(--muted);
+    font-size: 1.02rem;
+    text-wrap: balance;
+  }
+
+  section { margin-top: 44px; }
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 14px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+  }
+  .tile {
+    position: relative;
+    display: block;
+    padding: 20px 44px 20px 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    color: inherit;
+    text-decoration: none;
+    transition: transform .18s ease, background .18s ease, border-color .18s ease;
+  }
+  .tile h3 {
+    margin: 0 0 5px;
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .tile p { margin: 0; color: var(--muted); font-size: 0.88rem; }
+
+  a.tile::after {
+    content: "\2192";
+    position: absolute;
+    top: 19px;
+    right: 18px;
+    color: var(--muted);
+    font-size: 1.05rem;
+    transition: transform .18s ease, color .18s ease;
+  }
+  a.tile:hover, a.tile:focus-visible {
+    transform: translateY(-2px);
+    background: var(--card-hover);
+    border-color: var(--line-hover);
+    outline: none;
+  }
+  a.tile:hover::after, a.tile:focus-visible::after {
+    transform: translateX(3px);
+    color: var(--accent);
+  }
+  a.tile:active { transform: translateY(0); }
+
+  .tile.soon { padding-right: 20px; }
+  .tile.soon h3, .tile.soon p { opacity: .45; }
+  .badge {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  footer {
+    margin-top: 64px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tile, a.tile::after { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Music Apps</h1>
+    <p>Ear training, part writing, and sight reading practice.</p>
+  </header>
+
+  <main id="sections"></main>
+
+  <footer>Mr. LaGamma</footer>
+</div>
+
+<script>
+/* =====================================================================
+   YOUR APP LIST — this is the only part you ever need to edit.
+
+   folder: must match the folder name in your GitHub repository exactly.
+   A tile turns into a working link automatically once that folder
+   contains an index.html. Until then it shows "Coming soon".
+
+   To add an app: copy one line, change the three values.
+   To remove an app: delete its line.
+   ===================================================================== */
+const SECTIONS = [
+  { title: "Ear Training", apps: [
+    { name: "Melodic Dictation",      folder: "melodic-dictation",      desc: "Hear a melody three times and notate it on the staff." },
+    { name: "Harmonic Dictation",     folder: "harmonic-dictation",     desc: "Notate the outer voices and analyze with Roman numerals." },
+    { name: "Aural Error Detection",  folder: "aural-error-detection",  desc: "Find where the performance differs from the score." },
+  ]},
+  { title: "Part Writing", apps: [
+    { name: "Chorale Writer",         folder: "chorale-writer",         desc: "Write four-voice chorales with voice-leading feedback." },
+    { name: "Chorale Analyzer",       folder: "chorale-analyzer",       desc: "Check an SATB chorale for part-writing errors." },
+    { name: "Harmonizing a Melody",   folder: "harmonizing-a-melody",   desc: "FRQ 7 practice: write a bass line and harmonies." },
+  ]},
+  { title: "Sight Reading & Singing", apps: [
+    { name: "Sight-Singing",          folder: "sight-singing",          desc: "Sing the melody into your mic and get an AP-style score." },
+    { name: "SightFlow",              folder: "sightflow",              desc: "Sight-read on your instrument with live pitch detection." },
+    { name: "Rhythm Reader",          folder: "rhythm-reader",          desc: "Tap along to notated rhythms." },
+  ]},
+  { title: "Quizzes", apps: [
+    { name: "AP Theory Practice Quiz",  folder: "ap-theory-quiz",          desc: "Multiple-choice practice across every exam topic." },
+    { name: "Secondary Function Quiz",  folder: "secondary-function-quiz", desc: "Spell secondary dominants on the keyboard." },
+    { name: "Piano Theory Quiz",        folder: "piano-theory-quiz",       desc: "Keys, notes, and key signatures at the piano." },
+  ]},
+];
+/* ===================== end of the part you edit ===================== */
+
+const main = document.getElementById("sections");
+
+SECTIONS.forEach(group => {
+  const section = document.createElement("section");
+  const h2 = document.createElement("h2");
+  h2.textContent = group.title;
+  const grid = document.createElement("div");
+  grid.className = "grid";
+
+  group.apps.forEach(app => {
+    const tile = document.createElement("div");
+    tile.className = "tile soon";
+    tile.innerHTML = "<h3></h3><p></p><span class='badge'>Coming soon</span>";
+    tile.querySelector("h3").textContent = app.name;
+    tile.querySelector("p").textContent = app.desc;
+    grid.appendChild(tile);
+
+    // If the app's folder exists on the site, swap the tile for a real link.
+    fetch(app.folder + "/index.html", { method: "HEAD" })
+      .then(r => {
+        if (!r.ok) return;
+        const link = document.createElement("a");
+        link.className = "tile";
+        link.href = app.folder + "/";
+        link.innerHTML = "<h3></h3><p></p>";
+        link.querySelector("h3").textContent = app.name;
+        link.querySelector("p").textContent = app.desc;
+        tile.replaceWith(link);
+      })
+      .catch(() => {});
+  });
+
+  section.appendChild(h2);
+  section.appendChild(grid);
+  main.appendChild(section);
+});
+</script>
+</body>
+</html>
