@@ -165,7 +165,7 @@ const SECTIONS = [
   { title: "AP FRQ", apps: [
     { name: "Melodic Dictation",                    folder: "melodic-dictation",   desc: "Hear a melody and notate it on the staff." },
     { name: "Harmonic Dictation",                   folder: "harmonic-dictation",  desc: "Notate the outer voices and analyze with Roman numerals." },
-    { name: "Chorale Realization & Figured Bass",   folder: "chorale-analyzer",    desc: "Realize four-voice chorales with part-writing feedback." },
+    { name: "Chorale Realization & Figured Bass",   folder: "chorale-writer",      desc: "Realize four-voice chorales with part-writing feedback." },
     { name: "Harmonize a Melody",                   folder: "harmonize-a-melody",  desc: "Write a bass line and harmonies for a given melody." },
   ]},
   { title: "Classroom", apps: [
@@ -173,6 +173,7 @@ const SECTIONS = [
     { name: "Live Notation Board",    folder: "live-notation-board",    desc: "Follow along and answer on a shared staff in class." },
   ]},
   { title: "Practice Apps", apps: [
+    { name: "Chorale Analysis",         folder: "chorale-analyzer",        desc: "Check an SATB chorale for part-writing errors." },
     { name: "Rhythm Reader",            folder: "rhythm-reader",           desc: "Tap along to notated rhythms." },
     { name: "Interval Trainer",         folder: "interval-trainer",        desc: "Identify and build intervals." },
     { name: "Secondary Dominants",      folder: "secondary-dominants",     desc: "Spell and identify secondary dominants." },
@@ -205,6 +206,8 @@ SECTIONS.forEach(group => {
         const link = document.createElement("a");
         link.className = "tile";
         link.href = app.folder + "/";
+        link.target = "_blank";
+        link.rel = "noopener";
         link.innerHTML = "<h3></h3><p></p>";
         link.querySelector("h3").textContent = app.name;
         link.querySelector("p").textContent = app.desc;
