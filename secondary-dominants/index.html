@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 10px; }
+    .card { background: white; padding: 20px; border-radius: 12px; max-width: 520px; margin: 10px auto; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    #chord-name { font-size: 22px; font-weight: bold; color: #d32f2f; margin: 10px 0 16px; min-height: 60px; display: flex; align-items: center; justify-content: center; line-height: 1.2; text-align: center; }
+
+    .note-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 14px; }
+    .note-btn { padding: 10px 0; cursor: pointer; border: 1px solid #ccc; background: #fff; font-weight: bold; border-radius: 6px; font-size: 13px; transition: 0.15s; }
+    .note-btn.selected { background: #d32f2f; color: #fff; border-color: #b71c1c; }
+    .note-btn:hover:not(.selected) { background: #f5f5f5; }
+
+    /* ── Piano ── */
+    .piano-wrap { margin-bottom: 14px; }
+
+    .piano {
+      position: relative;   /* anchor for black keys */
+      height: 110px;
+      display: flex;
+      gap: 3px;
+      padding: 0;
+    }
+
+    /* White keys fill the flex row */
+    .white-key {
+      flex: 1;
+      height: 100%;
+      background: #fff;
+      border: 1px solid #bbb;
+      border-radius: 0 0 5px 5px;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.12s;
+      z-index: 1;
+    }
+    .white-key:hover:not(.selected) { background: #f0f0f0; }
+    .white-key.selected { background: #d32f2f; }
+
+    .white-key .key-label {
+      position: absolute;
+      bottom: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: #888;
+      pointer-events: none;
+    }
+    .white-key.selected .key-label { color: #fff; }
+
+    /* Black keys sit absolutely over the white keys */
+    .black-key {
+      position: absolute;
+      top: 0;
+      height: 62%;
+      background: #222;
+      border-radius: 0 0 4px 4px;
+      cursor: pointer;
+      z-index: 2;
+      transition: background 0.12s;
+    }
+    .black-key:hover:not(.selected) { background: #444; }
+    .black-key.selected { background: #d32f2f; }
+
+    .black-key .key-label {
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      color: #bbb;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .black-key.selected .key-label { color: #fff; }
+
+    /* ── Buttons ── */
+    .actions { display: flex; gap: 8px; margin-bottom: 10px; }
+    .submit { background: #2e7d32; color: white; border: none; padding: 13px; flex: 2; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; }
+    .submit:hover { background: #1b5e20; }
+    .hint-btn { background: #546e7a; color: white; border: none; padding: 13px; flex: 1; border-radius: 8px; font-size: 13px; cursor: pointer; }
+    .hint-btn:hover { background: #37474f; }
+    #msg { margin-top: 10px; font-weight: bold; min-height: 28px; font-size: 15px; text-align: center; color: #555; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="label">Secondary Function Quiz</div>
+  <div id="chord-name">Loading…</div>
+
+  <div class="piano-wrap">
+    <div class="piano" id="piano"></div>
+  </div>
+
+  <div class="note-grid" id="grid"></div>
+
+  <div class="actions">
+    <button class="submit" onclick="check()">Submit Answer</button>
+    <button class="hint-btn" onclick="showAnswer()">I'm Stuck (Show Answer)</button>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<script>
+const data = [
+  { q: "V7 / ii in C Major", a: ["A", "C#", "E", "G"] },
+  { q: "V7 / iii in C Major", a: ["B", "D#", "F#", "A"] },
+  { q: "V7 / IV in C Major", a: ["C", "E", "G", "Bb"] },
+  { q: "V7 / V in C Major", a: ["D", "F#", "A", "C"] },
+  { q: "V7 / vi in C Major", a: ["E", "G#", "B", "D"] },
+  { q: "V7 / ii in G Major", a: ["E", "G#", "B", "D"] },
+  { q: "V7 / iii in G Major", a: ["F#", "A#", "C#", "E"] },
+  { q: "V7 / IV in G Major", a: ["G", "B", "D", "F"] },
+  { q: "V7 / V in G Major", a: ["A", "C#", "E", "G"] },
+  { q: "V7 / vi in G Major", a: ["B", "D#", "F#", "A"] },
+  { q: "V7 / ii in D Major", a: ["B", "D#", "F#", "A"] },
+  { q: "V7 / IV in D Major", a: ["D", "F#", "A", "C"] },
+  { q: "V7 / V in D Major", a: ["E", "G#", "B", "D"] },
+  { q: "V7 / vi in D Major", a: ["F#", "A#", "C#", "E"] },
+  { q: "V7 / ii in F Major", a: ["D", "F#", "A", "C"] },
+  { q: "V7 / IV in F Major", a: ["F", "A", "C", "Eb"] },
+  { q: "V7 / V in F Major", a: ["G", "B", "D", "F"] },
+  { q: "V7 / vi in F Major", a: ["A", "C#", "E", "G"] },
+  { q: "V7 / V in Bb Major", a: ["C", "E", "G", "Bb"] },
+  { q: "V7 / ii in Bb Major", a: ["G", "B", "D", "F"] },
+  { q: "V7 / IV in Bb Major", a: ["Bb", "D", "F", "Ab"] },
+  { q: "V7 / III in A minor", a: ["G", "B", "D", "F"] },
+  { q: "V7 / iv in A minor", a: ["A", "C#", "E", "G"] },
+  { q: "V7 / V in A minor", a: ["B", "D#", "F#", "A"] },
+  { q: "V7 / VI in A minor", a: ["C", "E", "G", "Bb"] },
+  { q: "V7 / VII in A minor", a: ["D", "F#", "A", "C"] },
+  { q: "V7 / iv in E minor", a: ["E", "G#", "B", "D"] },
+  { q: "V7 / V in E minor", a: ["F#", "A#", "C#", "E"] },
+  { q: "V7 / VI in E minor", a: ["G", "B", "D", "F"] },
+  { q: "vii°7 / ii in C Major", a: ["C#", "E", "G", "Bb"] },
+  { q: "vii°7 / iii in C Major", a: ["D#", "F#", "A", "C"] },
+  { q: "vii°7 / IV in C Major", a: ["E", "G", "Bb", "Db"] },
+  { q: "vii°7 / V in C Major", a: ["F#", "A", "C", "Eb"] },
+  { q: "vii°7 / vi in C Major", a: ["G#", "B", "D", "F"] },
+  { q: "vii°7 / ii in G Major", a: ["G#", "B", "D", "F"] },
+  { q: "vii°7 / iii in G Major", a: ["A#", "C#", "E", "G"] },
+  { q: "vii°7 / IV in G Major", a: ["B", "D", "F", "Ab"] },
+  { q: "vii°7 / V in G Major", a: ["C#", "E", "G", "Bb"] },
+  { q: "vii°7 / vi in G Major", a: ["D#", "F#", "A", "C"] },
+  { q: "vii°7 / ii in D Major", a: ["D#", "F#", "A", "C"] },
+  { q: "vii°7 / V in D Major", a: ["G#", "B", "D", "F"] },
+  { q: "vii°7 / vi in D Major", a: ["A#", "C#", "E", "G"] },
+  { q: "vii°7 / ii in F Major", a: ["F#", "A", "C", "Eb"] },
+  { q: "vii°7 / V in F Major", a: ["B", "D", "F", "Ab"] },
+  { q: "vii°7 / IV in F Major", a: ["A", "C", "Eb", "Gb"] },
+  { q: "viiø7 / ii in C Major", a: ["C#", "E", "G", "B"] },
+  { q: "viiø7 / iii in C Major", a: ["D#", "F#", "A", "C#"] },
+  { q: "viiø7 / IV in C Major", a: ["E", "G", "Bb", "D"] },
+  { q: "viiø7 / V in C Major", a: ["F#", "A", "C", "E"] },
+  { q: "viiø7 / vi in C Major", a: ["G#", "B", "D", "F#"] },
+  { q: "viiø7 / ii in G Major", a: ["G#", "B", "D", "F#"] },
+  { q: "viiø7 / V in G Major", a: ["C#", "E", "G", "B"] },
+  { q: "viiø7 / IV in G Major", a: ["B", "D", "F", "A"] },
+  { q: "viiø7 / ii in D Major", a: ["D#", "F#", "A", "C#"] },
+  { q: "viiø7 / V in D Major", a: ["G#", "B", "D", "F#"] },
+  { q: "viiø7 / IV in D Major", a: ["C#", "E", "G", "B"] },
+  { q: "viiø7 / ii in F Major", a: ["F#", "A", "C", "E"] },
+  { q: "viiø7 / vi in F Major", a: ["B", "D", "F", "A"] },
+  { q: "V7 / ii in A Major", a: ["B", "D#", "F#", "A"] },
+  { q: "vii°7 / V in A Major", a: ["D#", "F#", "A", "C"] },
+  { q: "V7 / V in Eb Major", a: ["F", "A", "C", "Eb"] },
+  { q: "vii°7 / ii in Eb Major", a: ["A", "C", "Eb", "Gb"] },
+  { q: "V7 / vi in Bb Major", a: ["D", "F#", "A", "C"] },
+  { q: "vii°7 / V in Bb Major", a: ["E", "G", "Bb", "Db"] },
+  { q: "V7 / IV in Ab Major", a: ["Db", "F", "Ab", "Cb"] },
+  { q: "vii°7 / V in E Major", a: ["A#", "C#", "E", "G"] },
+  { q: "viiø7 / vi in Bb Major", a: ["F#", "A", "C", "E"] },
+  { q: "V7 / ii in E Major", a: ["F#", "A#", "C#", "E"] },
+  { q: "vii°7 / iii in G Major", a: ["A#", "C#", "E", "G"] }
+];
+
+const notes = ["C","C#","Db","D","D#","Eb","E","Fb","E#","F","F#","Gb","G","G#","Ab","A","A#","Bb","B","B#","Cb","Bbb"];
+
+// afterWhite: index (0-based) of the white key to the LEFT of this black key
+const BLACK_KEY_DEFS = [
+  { aliases: ["C#","Db"], afterWhite: 0 },
+  { aliases: ["D#","Eb"], afterWhite: 1 },
+  { aliases: ["F#","Gb"], afterWhite: 3 },
+  { aliases: ["G#","Ab"], afterWhite: 4 },
+  { aliases: ["A#","Bb"], afterWhite: 5 },
+];
+
+const enharmonics = {
+  "C#":["C#","Db"],"Db":["C#","Db"],
+  "D#":["D#","Eb"],"Eb":["D#","Eb"],
+  "F#":["F#","Gb"],"Gb":["F#","Gb"],
+  "G#":["G#","Ab"],"Ab":["G#","Ab"],
+  "A#":["A#","Bb"],"Bb":["A#","Bb"],
+  "B#":["B#","Cb"],"Cb":["B#","Cb"],
+  "E#":["E#","Fb"],"Fb":["E#","Fb"],
+  "Bbb":["Bbb","A"],
+};
+
+let selected = [];
+let current;
+
+function getGroup(n) { return enharmonics[n] || [n]; }
+
+function toggleNote(n) {
+  const grp = getGroup(n);
+  if (selected.some(s => grp.includes(s))) {
+    selected = selected.filter(s => !grp.includes(s));
+  } else {
+    selected.push(n);
+  }
+  refreshUI();
+}
+
+function isSelected(n) {
+  return selected.some(s => getGroup(n).includes(s));
+}
+
+function refreshUI() {
+  document.querySelectorAll('.note-btn').forEach(b =>
+    b.classList.toggle('selected', isSelected(b.dataset.note)));
+  document.querySelectorAll('.white-key').forEach(b =>
+    b.classList.toggle('selected', isSelected(b.dataset.note)));
+  document.querySelectorAll('.black-key').forEach(b =>
+    b.classList.toggle('selected', b.dataset.aliases.split(',').some(a => isSelected(a))));
+}
+
+function buildPiano() {
+  const piano = document.getElementById('piano');
+  piano.innerHTML = '';
+  const whiteNotes = ["C","D","E","F","G","A","B","C"];
+  const N = whiteNotes.length;
+
+  // White keys
+  whiteNotes.forEach(n => {
+    const k = document.createElement('div');
+    k.className = 'white-key';
+    k.dataset.note = n;
+    k.innerHTML = `<span class="key-label">${n}</span>`;
+    k.onclick = () => toggleNote(n);
+    piano.appendChild(k);
+  });
+
+  // Black keys — positioned after layout is in the DOM
+  // We calculate left% based on white key slot widths
+  // Each white key occupies (100/N)% of the piano width.
+  // A black key sitting between slot i and i+1 is centered at (i+1)*(100/N)%
+  // We give it a width of 55% of one white-key slot.
+  const wPct = 100 / N;
+  const bWidth = wPct * 0.55;
+
+  BLACK_KEY_DEFS.forEach(bk => {
+    const k = document.createElement('div');
+    k.className = 'black-key';
+    k.dataset.aliases = bk.aliases.join(',');
+    // center the black key on the boundary between afterWhite and afterWhite+1
+    const centerPct = (bk.afterWhite + 1) * wPct;
+    k.style.left   = (centerPct - bWidth / 2) + '%';
+    k.style.width  = bWidth + '%';
+    k.innerHTML = `<span class="key-label">${bk.aliases[0]}</span>`;
+    k.onclick = () => toggleNote(bk.aliases[0]);
+    piano.appendChild(k);
+  });
+}
+
+function buildAlphaPad() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  notes.forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'note-btn';
+    b.innerText = n;
+    b.dataset.note = n;
+    b.onclick = () => toggleNote(n);
+    grid.appendChild(b);
+  });
+}
+
+function next() {
+  current = data[Math.floor(Math.random() * data.length)];
+  document.getElementById('chord-name').innerText = current.q;
+  selected = [];
+  refreshUI();
+  document.getElementById('msg').innerText = '';
+}
+
+function normalizeNote(n) {
+  const map = {"Db":"C#","Eb":"D#","Gb":"F#","Ab":"G#","Bb":"A#","Cb":"B","Fb":"E","E#":"F","B#":"C","Bbb":"A"};
+  return map[n] || n;
+}
+
+function check() {
+  const s1 = [...selected].map(normalizeNote).sort().join(',');
+  const s2 = [...current.a].map(normalizeNote).sort().join(',');
+  const m = document.getElementById('msg');
+  if (s1 === s2) {
+    m.innerText = "✓ Correct!";
+    m.style.color = "green";
+    setTimeout(next, 1100);
+  } else {
+    m.innerText = "❌ Not quite — try again!";
+    m.style.color = "#d32f2f";
+  }
+}
+
+function showAnswer() {
+  const m = document.getElementById('msg');
+  m.innerHTML = "Answer: <span style='color:#d32f2f;font-weight:bold'>" + current.a.join(' – ') + "</span>";
+  m.style.color = "#555";
+}
+
+buildPiano();
+buildAlphaPad();
+next();
+</script>
+</body>
+</html>
