@@ -174,7 +174,7 @@ body.present main{max-width:none;padding-top:10px}
 </head>
 <body>
 <header class="top">
-  <div class="brand"><i aria-hidden="true"></i>Notation Board <span class="ver" title="Which version of the page is running">Nov 14</span></div>
+  <div class="brand"><i aria-hidden="true"></i>Notation Board <span class="ver" title="Which version of the page is running">Nov 15</span></div>
   <div class="spacer"></div>
   <span class="chip timer hide" id="timerChip" role="timer"></span>
   <button type="button" class="chip spot hide" id="spotChip" title="Stop showing this answer to the class">Showing to class · Stop</button>
@@ -251,6 +251,7 @@ body.present main{max-width:none;padding-top:10px}
         <button type="button" class="tool voice hide" data-voice="A" title="Alto (treble staff, stems down)" aria-label="Alto">A</button>
         <button type="button" class="tool voice hide" data-voice="T" title="Tenor (bass staff, stems up)" aria-label="Tenor">T</button>
         <button type="button" class="tool voice hide" data-voice="B" title="Bass (bass staff, stems down)" aria-label="Bass">B</button>
+        <button type="button" class="ghost hide" id="btnAutoV" aria-pressed="true" title="Writing by hand: the voice comes from the staff and the stem. Treble stem up = soprano, treble stem down = alto, bass stem up = tenor, bass stem down = bass.">Auto voice</button>
       </div>
       <div class="sep"></div>
       <div class="grp" id="inkGrp" role="group" aria-label="Pen">
@@ -304,6 +305,7 @@ body.present main{max-width:none;padding-top:10px}
         <label class="chk"><input type="checkbox" id="numbersChk" checked> Measure numbers</label>
         <label class="chk" title="Students can add to what you wrote but cannot change or erase it"><input type="checkbox" id="lockChk"> Lock my notes</label>
         <label class="chk" title="Dictation: students hear your notes but do not see them"><input type="checkbox" id="hideChk"> Dictation (hide my notes)</label>
+        <button type="button" class="ghost" id="btnRec" title="Save exactly how your pen writes, so the handwriting reader can be tuned to you">Record handwriting</button>
       </div>
       <div class="rowbar opts" id="classRow">
         <span class="olbl">Class</span>
@@ -341,6 +343,18 @@ body.present main{max-width:none;padding-top:10px}
         <button type="button" class="btn t-only" id="btnSendBack">Send back to student</button>
         <button type="button" class="btn btn-go" id="btnBack">Back to my board</button>
       </span>
+    </div>
+    <div class="note" id="recBar" style="align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <b>Recording handwriting</b>
+      <label class="chk">I'm writing
+        <select id="recLabel">
+          <option>Quarter, stem up</option><option>Quarter, stem down</option><option>Half, stem up</option><option>Half, stem down</option>
+          <option>Whole</option><option>Eighth with a flag</option><option>Beamed eighths</option><option>Sixteenths</option>
+          <option>Dotted note</option><option>Chord</option><option>SATB beat (four voices)</option><option>Other / mixed</option>
+        </select></label>
+      <span class="status" id="recCount">0 samples</span>
+      <button type="button" class="btn" id="recSave">Download</button>
+      <button type="button" class="ghost" id="recStop">Stop</button>
     </div>
     <div class="prompt" id="promptOut"></div>
     <div class="zoombar">
@@ -926,7 +940,7 @@ function redraw(){
 function setBoard(b,keepHistory){closeEditor();dropInk();B.board=b;setSel([]);B.cursor=0;if(!keepHistory)B.history=[];redraw();}
 function snapshot(){B.history.push(JSON.stringify(B.board));if(B.history.length>60)B.history.shift();}
 function changed(){if(B.onChange)B.onChange();}
-function undo(){if(HW.pend.length){dropInk();return;}if(B.readOnly||!B.history.length)return;closeEditor();B.board=parseBoard(B.history.pop());setSel(selList());redraw();changed();}
+function undo(){HW.last=null;if(HW.pend.length){dropInk();return;}if(B.readOnly||!B.history.length)return;closeEditor();B.board=parseBoard(B.history.pop());setSel(selList());redraw();changed();}
 function pt(e){const r=B.inkSvg.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*B.g.H};}
 const locked=()=>{flash('That was written by your teacher and is locked.');};
 const chordLocked=ch=>!!ch&&(!!ch.g||(ch.ps||[]).some(p=>p[2]));
@@ -986,7 +1000,7 @@ function onDown(e){
     if(B.markOnly||B.pinching||(B.penSeen&&e.pointerType==='touch'))return;
     e.preventDefault();try{B.inkSvg.setPointerCapture(e.pointerId);}catch(err){}
     clearTimeout(HW.timer);
-    B.stroke={draw:true,c:ACCENT,p:[+p.x.toFixed(1),+p.y.toFixed(1)]};
+    B.stroke={draw:true,c:ACCENT,p:[+p.x.toFixed(1),+p.y.toFixed(1)],t:[0],t0:performance.now(),type:e.pointerType};
     B.stroke.el=strokePath(B.stroke);B.stroke.el.setAttribute('data-ui',1);B.stroke.el.setAttribute('opacity',.6);B.inkSvg.insertBefore(B.stroke.el,B.ghost);
     return;
   }
@@ -1103,7 +1117,7 @@ function placeAt(p,toggle,o){
      a tap on a note                        → cycles its length
    Distances are in board units: a staff space is 10.
 ═══════════════════════════════════════════════════ */
-const HW={pend:[],timer:0,told:false,WAIT:550};
+const HW={pend:[],timer:0,told:false,WAIT:550,JOIN:2600,last:null,lastVoice:{}};
 function resample(p,step){                                   // a flat [x,y,x,y…] stroke → points about `step` apart
   const out=[[p[0],p[1]]];let px=p[0],py=p[1],carry=0;
   for(let i=2;i<p.length;i+=2){
@@ -1260,7 +1274,7 @@ function readInk(strokes){
     const hx=st.x-6*u;
     const pitches=heads.length?heads.map(cp=>{const slash=cp.len<=1.35*Math.hypot(cp.b.w,cp.b.h)&&!isOpen(cp.pts,cp.list.map(pc=>pc.pts));return slash?{x:hx,y:yEnd}:{x:cp.b.cx,y:cp.b.cy};}):[{x:hx,y:yEnd}];
     heads.forEach(cp=>{cp.used=true;});at(other).forEach(cp=>{cp.used=true;});
-    pitches.forEach(pt=>notes.push({x:pt.x,y:pt.y,dur,vdir:-u,st,group:st.group}));
+    pitches.forEach(pt=>notes.push({x:pt.x,y:pt.y,dur,vdir:u,st,group:st.group}));      // head at the bottom = stem up = +1
   });
   /* 6. heads with no stem, and small marks */
   comps.forEach(cp=>{
@@ -1287,13 +1301,20 @@ function locateFor(p,dur,vdir){
 /* put what was read onto the board, as one step for Undo */
 function flushInk(){
   clearTimeout(HW.timer);
-  const pend=HW.pend;HW.pend=[];if(!pend.length)return;
+  let pend=HW.pend;HW.pend=[];if(!pend.length)return;
   pend.forEach(s=>s.el.remove());
   if(B.readOnly||B.markOnly)return;
-  const r=readInk(pend.map(s=>s.p)),b=B.board,before=JSON.stringify(b.notes);
+  /* A stroke written soon after, right next to the last notes (a stem added after its head, say), is read
+     together with them: the last notes are taken back and everything is read again as one. */
+  const L0=HW.last,since=L0?performance.now()-L0.at:null;let merged=false;
+  if(L0&&since<HW.JOIN&&B.history[B.history.length-1]===L0.snap&&JSON.stringify(B.board)===L0.after&&inkNear(L0.strokes,pend)){
+    B.history.pop();B.board=parseBoard(L0.snap);pend=L0.strokes.concat(pend);merged=true;
+  }
+  const r=readInk(pend.map(s=>s.p)),b=B.board,before=JSON.stringify(b.notes),beforeNotes=JSON.parse(before);
   snapshot();
   const order=r.notes.slice().sort((a,c)=>a.x-c.x),next=new Map();
-  order.forEach(n=>{
+  const stemless=n=>!n.dur||n.dur==='w';
+  order.forEach(n=>withVoice(autoVoiceOn()?voiceFor({x:n.x,y:n.y},stemless(n)?0:n.vdir,stemless(n)?r.notes.filter(m=>m!==n&&stemless(m)&&Math.abs(m.x-n.x)<10):null):null,()=>{
     if(!n.dur){placeAt({x:n.x,y:n.y},false,{batch:true});return;}           // a filled head with no stem: the palette's length
     const L=locateFor({x:n.x,y:n.y},n.dur,n.vdir);if(!L)return;
     if(n.group){                                              // beamed notes follow one another
@@ -1302,7 +1323,7 @@ function flushInk(){
       if(!n.st.done){next.set(n.group,L.slot+DUR_TICKS[n.dur]);n.st.done=true;}
     }
     placeAt({x:n.x,y:n.y},false,{batch:true,L,dur:n.dur});
-  });
+  }));
   r.small.forEach(m=>{                                        // taps change a note's length; a mark just after a head is a dot
     const hs=headsOnBoard();
     const on=hs.filter(h=>Math.abs(h.x-m.x)<5.5&&Math.abs(h.y-m.y)<=4.5).sort((a,c)=>Math.hypot(a.x-m.x,a.y-m.y)-Math.hypot(c.x-m.x,c.y-m.y))[0];
@@ -1318,10 +1339,68 @@ function flushInk(){
       if(canDot(dotOf.ch.dur)){const t=Object.assign({},dotOf.ch,{dot:true});delete t.tr;const why=fitProblem(dotOf.lk,dotOf.slot,t,dotOf.slot);
         if(why)flash(why);else{dotOf.ch.dot=true;delete dotOf.ch.tr;}}
       return;}
-    placeAt({x:m.x,y:m.y},false,{batch:true});                // a pressed dot on its own: a note head of the palette's length
+    withVoice(autoVoiceOn()?voiceFor(m,0):null,()=>placeAt({x:m.x,y:m.y},false,{batch:true}));   // a pressed dot on its own: a note head of the palette's length
   });
-  if(JSON.stringify(b.notes)===before)B.history.pop();else{redraw();changed();}
+  if(JSON.stringify(b.notes)===before){B.history.pop();if(merged){redraw();changed();HW.last=null;}}
+  else{redraw();changed();HW.last={strokes:pend,at:performance.now(),snap:B.history[B.history.length-1],after:JSON.stringify(B.board)};}
+  if(REC.on)recordBatch(pend,r,merged,since,beforeNotes);
   if(r.msgs.length)flash(r.msgs[0]);
+}
+function inkNear(a,c){                                       // does any stroke of c come within reach of a stroke of a?
+  const boxes=a.map(s=>{const q=[];for(let i=0;i<s.p.length;i+=2)q.push([s.p[i],s.p[i+1]]);return bbOf(q);});
+  return c.some(s=>{const q=[];for(let i=0;i<s.p.length;i+=2)q.push([s.p[i],s.p[i+1]]);const k=bbOf(q);
+    return boxes.some(o=>k.x0<=o.x1+24&&k.x1>=o.x0-24&&k.y0<=o.y1+24&&k.y1>=o.y0-24);});
+}
+/* ── Auto voice (four voices, writing by hand): the staff and the stem choose the voice.
+   A note with no stem (a whole note, or a head alone) goes by pitch against the other voice on that staff. ── */
+const AUTOV={on:true};try{AUTOV.on=localStorage.getItem('lnb_autovoice')!=='off';}catch(e){}
+const autoVoiceOn=()=>AUTOV.on&&fourOn();
+function voiceFor(p,vdir,peers){
+  const s=spot(p,1);if(!s)return null;
+  const si=s.si,up=si?'T':'S',lo=si?'B':'A';
+  if(vdir)return vdir>0?up:lo;
+  const d=pitchAt(p,s.row,si);
+  const at=lk=>{const L=B.board.notes[lk];let best=null;
+    Object.keys(L).forEach(k=>{const s0=+k,o=L[k];if(!sounding(o)||o.rest)return;if(Math.abs(s0-s.slot)<=3||(s0<=s.slot&&s.slot<s0+chLen(o)))best=o.ps[0][0];});return best;};
+  const u=at(up),l=at(lo);
+  if(u!=null&&l!=null)return Math.abs(d-u)<=Math.abs(d-l)?up:lo;
+  if(u!=null)return d>u?up:lo;
+  if(l!=null)return d<l?lo:up;
+  if(peers&&peers.some(m=>m.y>p.y+3))return up;              // another head without a stem below this one, written together
+  if(peers&&peers.some(m=>m.y<p.y-3))return lo;
+  return HW.lastVoice[si]||up;
+}
+function withVoice(v,fn){
+  if(!v)return fn();
+  const keep=B.voice;B.voice=v;
+  try{return fn();}finally{B.voice=keep;HW.lastVoice[LAYERS[v].staff]=v;}
+}
+
+/* ── Recording handwriting: every batch the reader sees, with timing, what it read and what went on the board ── */
+const REC={on:false,samples:[]};
+try{REC.samples=JSON.parse(localStorage.getItem('lnb_hwrec')||'[]');}catch(e){}
+function recordBatch(pend,r,merged,since,beforeNotes){
+  const t0=Math.min(...pend.map(s=>s.t0||0)),after=B.board.notes,changes=[];
+  LAYER_KEYS.forEach(lk=>{const a=beforeNotes[lk]||{},z=after[lk];
+    new Set(Object.keys(a).concat(Object.keys(z))).forEach(k=>{if(JSON.stringify(a[k])!==JSON.stringify(z[k]))changes.push({lk,slot:+k,was:a[k]||null,now:z[k]||null});});});
+  const g=B.g;
+  REC.samples.push({label:$('recLabel').value,at:new Date().toISOString(),merged,sincePrevMs:since==null?null:Math.round(since),
+    strokes:pend.map(s=>({start:Math.round((s.t0||0)-t0),end:Math.round((s.t1||0)-t0),type:s.type||'',p:s.p,t:s.t||[]})),
+    read:{notes:r.notes.map(n=>({x:+n.x.toFixed(1),y:+n.y.toFixed(1),dur:n.dur,vdir:n.vdir||0})),small:r.small,msgs:r.msgs},changes,
+    board:{staves:B.board.staves,vmode:B.board.vmode,meter:B.board.meter,measures:B.board.measures,key:B.board.key,palette:B.dur,voice:B.voice,autoVoice:autoVoiceOn(),zoom:B.zoom},
+    geom:{A:g.A,mw:g.mw,sw:g.sw,rowH:g.rowH,T0:g.T0,B0:g.B0,perRow:g.perRow}});
+  try{localStorage.setItem('lnb_hwrec',JSON.stringify(REC.samples));}catch(e){}
+  paintRec();
+}
+function paintRec(){$('recBar').style.display=REC.on?'flex':'none';const n=REC.samples.length;$('recCount').textContent=n+' sample'+(n===1?'':'s');$('btnRec').classList.toggle('on',REC.on);}
+function startRec(){
+  REC.on=true;paintRec();if(B.mode!=='draw')setMode('draw');
+  flash('Recording. Pick what you are about to write, then write it several times, the way you normally do. Download when you are done and send me the file.',true);
+}
+function saveRec(){
+  if(!REC.samples.length){flash('Nothing recorded yet. Write some notes with the pencil first.');return;}
+  const data={app:'Notation Board',version:'Nov 15',device:navigator.userAgent,screen:[screen.width,screen.height,devicePixelRatio],wait:HW.WAIT,join:HW.JOIN,samples:REC.samples};
+  download(new Blob([JSON.stringify(data)],{type:'application/json'}),'handwriting-samples-'+new Date().toISOString().slice(0,10)+'.json');
 }
 function dropInk(){clearTimeout(HW.timer);HW.pend.forEach(s=>s.el.remove());HW.pend=[];}
 
@@ -1340,7 +1419,7 @@ function onMove(e){
   const s=B.stroke;if(!s)return;
   if(s.erase){eraseAt(p);return;}
   const n=s.p.length;if(Math.hypot(p.x-s.p[n-2],p.y-s.p[n-1])<1.6/B.zoom)return;
-  s.p.push(+p.x.toFixed(1),+p.y.toFixed(1));
+  s.p.push(+p.x.toFixed(1),+p.y.toFixed(1));if(s.t)s.t.push(Math.round(performance.now()-s.t0));
   s.el.setAttribute('d',s.el.getAttribute('d')+'L'+s.p[n]+' '+s.p[n+1]);
 }
 function onUp(e){
@@ -1357,7 +1436,7 @@ function onUp(e){
   if(t&&e&&!B.pinching&&Math.hypot(e.clientX-t.x,e.clientY-t.y)<12)act(t.p);
   const s=B.stroke;if(!s)return;B.stroke=null;
   if(s.draw){                                                // keep the stroke and wait to see if more strokes belong with it
-    HW.pend.push({p:s.p,el:s.el});clearTimeout(HW.timer);HW.timer=setTimeout(flushInk,HW.WAIT);
+    HW.pend.push({p:s.p,el:s.el,t:s.t,t0:s.t0,t1:performance.now(),type:s.type});clearTimeout(HW.timer);HW.timer=setTimeout(flushInk,HW.WAIT);
     return;
   }
   if(s.erase){if(s.hit)changed();else B.history.pop();return;}
@@ -1777,7 +1856,9 @@ function paintDock(){
   document.querySelectorAll('#inkGrp .tool[data-ink]').forEach(x=>x.classList.toggle('on',m==='pen'&&x.dataset.ink===B.ink));
   const grand=b.staves==='grand',vm=b.vmode==='four'&&!grand?'one':b.vmode,placing=m==='note'||m==='draw'||m==='rest';   // four voices need both staves
   $('vmodeSel').value=vm;$('vmodeSel').querySelector('[value=four]').disabled=!grand;
-  document.querySelectorAll('#voiceGrp [data-voice]').forEach(x=>{x.classList.toggle('hide',vm!=='four');x.classList.toggle('on',placing&&x.dataset.voice===B.voice);});
+  const autoDraw=m==='draw'&&AUTOV.on&&vm==='four';
+  document.querySelectorAll('#voiceGrp [data-voice]').forEach(x=>{x.classList.toggle('hide',vm!=='four');x.classList.toggle('on',placing&&!autoDraw&&x.dataset.voice===B.voice);});
+  show('btnAutoV',vm==='four');$('btnAutoV').classList.toggle('on',AUTOV.on);$('btnAutoV').setAttribute('aria-pressed',AUTOV.on);
   document.querySelectorAll('#voiceGrp [data-vdir]').forEach(x=>{x.classList.toggle('hide',vm!=='two');x.classList.toggle('on',placing&&+x.dataset.vdir===B.vdir);});
   if(B.host){B.host.classList.toggle('pen',m==='pen'||m==='draw');B.host.classList.toggle('text',m==='text');B.host.classList.toggle('locked',B.readOnly);}
   if(B.ghost)B.ghost.setAttribute('opacity',0);
@@ -1788,7 +1869,7 @@ function paintDock(){
   });
   ['vmodeSel','keySel','stavesSel','meterSel','measLess','measMore','btnInsMeas','btnDelMeas','meterChk','numbersChk','lockChk','hideChk','btnMidi'].forEach(id=>$(id).disabled=noNotes);
 }
-function setMode(m){closeEditor();if(m!=='draw')flushInk();B.mode=m;if(m!=='select')setSel([]);paintSel();paintCaret();paintDock();}
+function setMode(m){closeEditor();if(m!=='draw'){flushInk();HW.last=null;}B.mode=m;if(m!=='select')setSel([]);paintSel();paintCaret();paintDock();}
 
 /* ═══════════════════════════════════════════════════
    SAVING a board as a picture or a PDF
@@ -2397,6 +2478,11 @@ $('btnPresent').addEventListener('click',()=>present(true));
 $('btnExitPresent').addEventListener('click',()=>present(false));
 $('btnSend').addEventListener('click',send);
 $('btnNewQ').addEventListener('click',askNewQuestion);
+$('btnAutoV').addEventListener('click',()=>{AUTOV.on=!AUTOV.on;try{localStorage.setItem('lnb_autovoice',AUTOV.on?'on':'off');}catch(e){}
+  paintDock();flash(AUTOV.on?'Auto voice is on. Writing by hand, stems up go to soprano or tenor and stems down to alto or bass. Tapped and typed notes still use the S A T B buttons.':'Auto voice is off. Handwritten notes go to the voice you pick.');});
+$('btnRec').addEventListener('click',()=>{if(REC.on){REC.on=false;paintRec();}else startRec();});
+$('recStop').addEventListener('click',()=>{REC.on=false;paintRec();});
+$('recSave').addEventListener('click',saveRec);
 $('promptIn').addEventListener('input',()=>{$('sendStatus').textContent='Changes not sent';autosave();});
 $('btnOptions').addEventListener('click',()=>{const open=$('optRows').classList.toggle('shut');$('btnOptions').setAttribute('aria-expanded',!open);});
 $('btnLibrary').addEventListener('click',openLibrary);
