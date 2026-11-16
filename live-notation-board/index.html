@@ -174,7 +174,7 @@ body.present main{max-width:none;padding-top:10px}
 </head>
 <body>
 <header class="top">
-  <div class="brand"><i aria-hidden="true"></i>Notation Board <span class="ver" title="Which version of the page is running">Nov 15</span></div>
+  <div class="brand"><i aria-hidden="true"></i>Notation Board <span class="ver" title="Which version of the page is running">Nov 15b</span></div>
   <div class="spacer"></div>
   <span class="chip timer hide" id="timerChip" role="timer"></span>
   <button type="button" class="chip spot hide" id="spotChip" title="Stop showing this answer to the class">Showing to class · Stop</button>
@@ -1043,7 +1043,7 @@ function act(p){
     const h=hit(p);if(!h||h.d==null){flash('Tap a note to tie it to the next note of the same pitch.');return;}
     const ch=b.notes[h.lk][h.slot];snapshot();if(ch.tie)delete ch.tie;else ch.tie=true;redraw();changed();return;
   }
-  placeAt(p,true);
+  placeAt(p,true,{flex:'refused'});
 }
 /* put a note or rest where p points. toggle: tapping an existing note removes it (drawn notes never remove). */
 /* ── time check: each staff (or voice) is one line of rhythm, so a note may not start while an
@@ -1068,9 +1068,38 @@ function fitProblem(lk,slot,ch,ignore){
   }
   return'';
 }
+/* Where a note should really go when the spot under the pen is a little off. Looks along the eighth grid
+   (sixteenths and triplets on their own grids) within about a beat of where it was written, keeps only spots
+   where it fits, and prefers the nearest one on a normal position for its length: quarters and halves on a
+   beat, dotted quarters on the beat in 6/8, wholes on the barline. */
+function flexSlot(L,c,p,original){
+  const g=B.g,layer=B.board.notes[L.sk],len=chLen(c),end=g.n*g.bar,s1=spot(p,1);if(!s1)return null;
+  const m=Math.floor(s1.slot/g.bar),col=m%g.perRow,raw=m*g.bar+(p.x-g.A-col*g.mw)/g.sw;
+  const six=g.beat===18,step=c.dur==='w'?g.bar:isTrip(c)?4:c.dur==='s'?3:6;
+  const pref=c.dur==='w'?g.bar:isTrip(c)?4:c.dur==='s'?3:c.dur==='e'?6:six?(len>=18?18:6):12;
+  const win=Math.max(12,len/2);let best=null;
+  for(let sl=Math.max(0,Math.floor((raw-win)/step)*step);sl<=raw+win&&sl<end;sl+=step){
+    const here=layer[sl],full=here&&sounding(here)&&!here.rest;
+    if(here&&chordLocked(here))continue;
+    if(full&&!LAYERS[L.sk].stem&&sl!==original&&chLen(here)!==len)continue;   // joining a chord must not change its length
+    if(fitProblem(L.sk,sl,c,sl))continue;
+    let score=Math.abs(sl-raw)+(sl%pref?6:0);
+    if(full&&LAYERS[L.sk].stem)score+=10;                    // a voice already has a note there: writing would replace it
+    if(!best||score<best.score)best={sl,score};
+  }
+  return best?best.sl:null;
+}
 function placeAt(p,toggle,o){
   o=o||{};
   const b=B.board,L=o.L||locate(p);if(!L)return false;
+  if(p&&o.flex){                                             // handwriting always; taps only when the exact spot is refused
+    const c={dur:o.dur||B.dur};
+    if(o.dur){if(o.dot&&canDot(o.dur))c.dot=true;}else if(B.trip&&B.dur==='e')c.tr=true;else if(B.dot&&canDot(B.dur))c.dot=true;
+    if(B.mode==='rest'&&!o.dur)c.rest=true;
+    const cur=b.notes[L.sk][L.slot],there=!!cur&&sounding(cur);
+    const refused=!there&&!!fitProblem(L.sk,L.slot,c,L.slot);
+    if(o.flex==='always'||refused){const sl=flexSlot(L,c,p,L.slot);if(sl!=null)L.slot=sl;}
+  }
   const layer=b.notes[L.sk],ch=layer[L.slot],save=()=>{if(!o.batch)snapshot();};
   const done=()=>{
     const now=layer[L.slot];B.kStaff=LAYERS[L.sk].staff;
@@ -1244,6 +1273,8 @@ function readInk(strokes){
     stems.forEach(st=>[['bottom',st.y1],['top',st.y0]].forEach(([end,y])=>{
       let d=1e9;cp.pts.forEach(([x,yy])=>{d=Math.min(d,Math.hypot(x-st.x,yy-y));});
       if(d<=st.R*1.2&&(!best||d<best.d))best={st,end,d};}));
+    // a small mark to the right of where the head sits is a dot, not part of the note (head left of an up-stem, right of a down-stem)
+    if(best&&cp.tiny&&cp.b.cx>best.st.x+(best.end==='bottom'?2.5:10))best=null;
     if(best){cp.st=best.st;cp.end=best.end;}
   });
   /* 5. read each stem */
@@ -1315,14 +1346,14 @@ function flushInk(){
   const order=r.notes.slice().sort((a,c)=>a.x-c.x),next=new Map();
   const stemless=n=>!n.dur||n.dur==='w';
   order.forEach(n=>withVoice(autoVoiceOn()?voiceFor({x:n.x,y:n.y},stemless(n)?0:n.vdir,stemless(n)?r.notes.filter(m=>m!==n&&stemless(m)&&Math.abs(m.x-n.x)<10):null):null,()=>{
-    if(!n.dur){placeAt({x:n.x,y:n.y},false,{batch:true});return;}           // a filled head with no stem: the palette's length
+    if(!n.dur){placeAt({x:n.x,y:n.y},false,{batch:true,flex:'always'});return;}           // a filled head with no stem: the palette's length
     const L=locateFor({x:n.x,y:n.y},n.dur,n.vdir);if(!L)return;
     if(n.group){                                              // beamed notes follow one another
       const want=next.get(n.group);
       if(want!=null&&want<B.g.n*B.g.bar&&Math.floor(want/B.g.bar)===Math.floor(L.slot/B.g.bar)&&want!==L.slot&&Math.abs(want-L.slot)<=6)L.slot=want;
       if(!n.st.done){next.set(n.group,L.slot+DUR_TICKS[n.dur]);n.st.done=true;}
     }
-    placeAt({x:n.x,y:n.y},false,{batch:true,L,dur:n.dur});
+    placeAt({x:n.x,y:n.y},false,{batch:true,L,dur:n.dur,flex:n.group?'refused':'always'});
   }));
   r.small.forEach(m=>{                                        // taps change a note's length; a mark just after a head is a dot
     const hs=headsOnBoard();
@@ -1339,7 +1370,7 @@ function flushInk(){
       if(canDot(dotOf.ch.dur)){const t=Object.assign({},dotOf.ch,{dot:true});delete t.tr;const why=fitProblem(dotOf.lk,dotOf.slot,t,dotOf.slot);
         if(why)flash(why);else{dotOf.ch.dot=true;delete dotOf.ch.tr;}}
       return;}
-    withVoice(autoVoiceOn()?voiceFor(m,0):null,()=>placeAt({x:m.x,y:m.y},false,{batch:true}));   // a pressed dot on its own: a note head of the palette's length
+    withVoice(autoVoiceOn()?voiceFor(m,0):null,()=>placeAt({x:m.x,y:m.y},false,{batch:true,flex:'always'}));   // a pressed dot on its own: a note head of the palette's length
   });
   if(JSON.stringify(b.notes)===before){B.history.pop();if(merged){redraw();changed();HW.last=null;}}
   else{redraw();changed();HW.last={strokes:pend,at:performance.now(),snap:B.history[B.history.length-1],after:JSON.stringify(B.board)};}
@@ -1412,7 +1443,8 @@ function onMove(e){
     const L=B.readOnly||B.markOnly||e.pointerType==='touch'?null:locate(p);
     if(!L){B.ghost.setAttribute('opacity',0);return;}
     const c={dur:B.dur};if(B.trip&&B.dur==='e')c.tr=true;else if(B.dot&&canDot(B.dur))c.dot=true;
-    const bad=!!fitProblem(L.sk,L.slot,c,L.slot);
+    const cur=B.board.notes[L.sk][L.slot];let bad=!!fitProblem(L.sk,L.slot,c,L.slot);
+    if(bad&&B.mode!=='draw'&&!(cur&&sounding(cur))){const sl=flexSlot(L,c,p,L.slot);if(sl!=null){bad=false;L.x=slotXY(B.g,sl).x;}}   // shows where a tap will really land
     B.ghost.setAttribute('fill',bad?'#e03131':ACCENT);
     B.ghost.setAttribute('cx',L.x);B.ghost.setAttribute('cy',L.y);B.ghost.setAttribute('opacity',bad?.45:B.mode==='note'?.35:.15);return;
   }
