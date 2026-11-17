@@ -1879,6 +1879,16 @@ function scoreConnectionAP(i,chordRes,mode){
 
 /* ── Row 3: Roman numerals (figured bass) ── */
 function normRN(s){return (s||'').toLowerCase().replace(/[0-9]/g,'').replace(/°/g,'o').replace(/\s/g,'');}
+// A tonic 6/4 that moves to V is a cadential 6/4: it may be labelled I(6/4) or V(6/4–5/3)
+function isCadential64(i){
+  const c=BEATS[i]&&BEATS[i].chord,n=BEATS[i+1]&&BEATS[i+1].chord;
+  return !!(c&&n&&isTonicRN(c.rn)&&c.inv==='second'&&n.rn==='V');
+}
+function rnMatches(i,answered){
+  const a=normRN(answered);
+  if(a===normRN(BEATS[i].chord.rn))return true;
+  return isCadential64(i)&&a==='v';
+}
 
 /* ── Rounding: half points round up, except top-score-minus-½ rounds down ── */
 function apRound(x,apMax){
@@ -1998,15 +2008,15 @@ function gradeExercise(){
     BEATS.forEach((beat,i)=>{
       const answered=(userRN[i]||'').trim();
       const correct=beat.chord.rn;
-      if(answered&&normRN(answered)===normRN(correct)){
+      if(answered&&rnMatches(i,answered)){
         rnTotal++;
         rnEntries.push({i,state:'ok',cls:'e-ok',msg:`${loc(i)}: 1 / 1 — <strong>${esc(answered)}</strong>`});
       }else if(answered){
         issues.push('Wrong Roman numeral');
-        rnEntries.push({i,state:'wrong',cls:'e-err',msg:`${loc(i)}: 0 / 1 — you wrote <strong>${esc(answered)}</strong>, answer: <strong>${esc(correct)}</strong>`});
+        rnEntries.push({i,state:'wrong',cls:'e-err',msg:`${loc(i)}: 0 / 1 — you wrote <strong>${esc(answered)}</strong>, answer: <strong>${esc(correct)}</strong>${isCadential64(i)?' (or <strong>V</strong> — cadential 6/4)':''}`});
       }else{
         issues.push('Roman numeral not completed');
-        rnEntries.push({i,state:null,cls:'e-err',msg:`${loc(i)}: 0 / 1 — not completed (answer: <strong>${esc(correct)}</strong>)`});
+        rnEntries.push({i,state:null,cls:'e-err',msg:`${loc(i)}: 0 / 1 — not completed (answer: <strong>${esc(correct)}</strong>${isCadential64(i)?' or <strong>V</strong> — cadential 6/4':''})`});
       }
     });
   }
